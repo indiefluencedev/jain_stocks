@@ -30,6 +30,7 @@ import {
   seed,
 } from '@/lib/store';
 import { API, currentUser, signIn, signOut as authSignOut, hasPerm } from '@/lib/ops';
+import { authClient } from '@/lib/auth-client';
 
 interface ToastItem {
   id: string;
@@ -64,8 +65,8 @@ interface AppContextType {
   } | null;
   setRoute: (route: string) => void;
   refresh: () => void;
-  login: (username: string, pw: string) => void;
-  logout: () => void;
+  login: (username: string, pw: string) => Promise<void>;
+  logout: () => Promise<void>;
   can: (perm: Permission) => boolean;
   apiCall: (action: any, ...args: any[]) => any;
   showToast: (msg: string, type?: 'ok' | 'error') => void;
@@ -109,6 +110,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
+    console.log('[BETTER_AUTH] Verifying authentication session token from server...');
+    authClient.getSession().then((sessionRes) => {
+      if (sessionRes.data?.user) {
+        console.log('[BETTER_AUTH] Session active! User & Session payload received:', {
+          user: sessionRes.data.user,
+          session: sessionRes.data.session,
+        });
+      } else {
+        console.log('[BETTER_AUTH] No active session cookie found. Login required.');
+      }
+    }).catch(err => {
+      console.warn('[BETTER_AUTH] Error verifying session:', err);
+    });
+
     const handleHash = () => {
       const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0];
       if (hash) setActiveRouteState(hash);
@@ -117,15 +132,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     handleHash();
     window.addEventListener('hashchange', handleHash);
 
-    // Removed storage listener as it's handled by better-auth
-    // const handleStorage = (e: StorageEvent) => {
-    //   refresh();
-    // };
-    // window.addEventListener('storage', handleStorage);
-
     return () => {
       window.removeEventListener('hashchange', handleHash);
-      // window.removeEventListener('storage', handleStorage);
     };
   }, []);
 
@@ -136,12 +144,48 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const login = (username: string, pw: string) => {
-    const u = signIn(username, pw);
+  const login = async (username: string, pw: string) => {
+    const cleanUsername = String(username || '').trim().toLowerCase();
+    console.log('[BETTER_AUTH] Initiating authentication request for username/email:', cleanUsername);
+
+    const isEmail = cleanUsername.includes('@');
+    let authRes: any;
+
+    if (isEmail) {
+      authRes = await authClient.signIn.email({
+        email: cleanUsername,
+        password: pw,
+      });
+    } else {
+      authRes = await authClient.signIn.username({
+        username: cleanUsername,
+        password: pw,
+      });
+    }
+
+    if (authRes?.error) {
+      console.error('[BETTER_AUTH] Authentication failed:', authRes.error);
+      throw new Error(authRes.error.message || 'Incorrect username or password.');
+    }
+
+    console.log('[BETTER_AUTH] Authentication SUCCESSFUL!', {
+      user: authRes?.data?.user,
+      sessionToken: authRes?.data?.token || 'HTTP-Only Session Cookie Issued (better-auth.session_token)',
+      timestamp: new Date().toISOString(),
+    });
+
+    signIn(username, pw);
     refresh();
   };
 
-  const logout = () => {
+  const logout = async () => {
+    console.log('[BETTER_AUTH] Destroying session token and logging out...');
+    try {
+      await authClient.signOut();
+      console.log('[BETTER_AUTH] Session destroyed on server & cookies cleared.');
+    } catch (err) {
+      console.warn('[BETTER_AUTH] Sign-out warning:', err);
+    }
     authSignOut(false);
     setUser(null);
     setModal(null);

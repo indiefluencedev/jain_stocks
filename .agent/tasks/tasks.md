@@ -73,9 +73,65 @@ This file is the **Single Source of Truth (SSOT)** for all accomplished (`[x]`) 
   - `.agents/rules/git_push_permission.md`: Created workspace rule file defining git push permission requirements.
   - `AGENTS.md`: Updated to mandate explicit user permission before any `git push` command.
 
+### Task 7: Better-Auth Authentication & Session Management with Browser Console Logging
+- **Reason / Situation**: User requested ensuring login is properly authenticated with proper token and session process via `better-auth` without compromising security, and adding browser console logging to observe session tokens, authentication payloads, and login events.
+- **Status**: `[x]` Accomplished
+- **Files Involved & Changes Made**:
+  - `src/lib/auth.ts`: Configured server `betterAuth` instance with `pg.Pool` database adapter, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `generateId: "uuid"`, `emailAndPassword` provider, `username()` plugin, `admin()` plugin, and custom user fields (`role`, `username`, `phone`, `status`).
+  - `src/lib/auth-client.ts`: Created React client auth SDK instance via `createAuthClient` with `adminClient()` and `usernameClient()` plugins.
+  - `scripts/seed-better-auth.js`: Created and executed seeding script to populate `account` table in Neon DB with scrypt password hashes for all 10 demo users (`superadmin`, `owner`, `salesmgr`, `servicemgr`, `warehouse`, `stockin`, `store`, `sales`, `sales2`, `viewer`).
+  - `src/context/AppContext.tsx`: Integrated `authClient.signIn`, `authClient.getSession()`, and `authClient.signOut()`. Added explicit browser console logs (`[BETTER_AUTH]`) tracking login requests, session token receipt/verification, and logout events.
+  - `src/components/Views/LoginView.tsx`: Updated `handleSubmit` to async with loading state (`Authenticating...`) and browser console logging (`[LOGIN_VIEW]`).
+
 ---
 
 ## ⏳ Pending Tasks (`[ ]`)
+
+### Pending Task 1: Execute Static Data Migration on Neon DB
+- **Reason / Situation**: Shift hard-coded bike models, adjust reasons, and destination types from code to Neon DB database tables.
+- **Status**: `[ ]` Pending
+- **Files Involved**: `scripts/seed-static-data.ts`, `src/lib/ops.ts`, UI components.
+- **Derived From**: `improvment_task.md` (Next Step 1)
+
+### Pending Task 2: Add API Endpoints `listBikeModels` & `listAdjustReasons`
+- **Reason / Situation**: Fetch dynamic bike models and adjustment reasons from database at runtime instead of hardcoded arrays.
+- **Status**: `[ ]` Pending
+- **Files Involved**: `src/app/api/bikeModels/route.ts`, `src/app/api/adjustReasons/route.ts`, `src/components/Views/InventoryView.tsx`, `src/components/Views/ReturnsView.tsx`.
+- **Derived From**: `improvment_task.md` (Next Step 2)
+
+### Pending Task 3: Clean Up Unused Cryptographic Primitives from `store.ts`
+- **Reason / Situation**: Replace hand‑rolled `hashPw()` and `sha256()` in `src/lib/store.ts` with native `crypto.randomUUID()` and Web Crypto APIs.
+- **Status**: `[ ]` Pending
+- **Files Involved**: `src/lib/store.ts`.
+- **Derived From**: `improvment_task.md` (Next Step 3)
+
+### Pending Task 4: Remove Unused Dead Files Identified in Ponytail Audit
+- **Reason / Situation**: Delete dead files (`jain-stock-mvp_1.html`, `scripts/seed-users.ts`, `scripts/seed-full-db.ts`, `src/lib/auth-rbac.ts`, `src/lib/auth-client.ts`, `middleware.ts`, `neon.ts`).
+- **Status**: `[ ]` Pending
+- **Files Involved**: Dead files listed in `docs/audit_ponytail.md`.
+- **Derived From**: `improvment_task.md` (Audit findings)
+
+### Pending Task 5: Add RBAC Permission Tests
+- **Reason / Situation**: Ensure each role respects its permission set; currently no automated tests.
+- **Status**: `[ ]` Pending
+- **Files Involved**: New test file `tests/rbac.test.ts` referencing `src/lib/ops.ts` and `src/lib/constants.ts`.
+- **Derived From**: General quality assurance.
+
+
+### Broken / Missing Functions (auto‑detected)
+- **Missing API endpoint** `GET /api/bikeModels` (listBikeModels) – UI cannot fetch bike models from DB.
+- **Missing API endpoint** `GET /api/adjustReasons` (listAdjustReasons) – UI cannot fetch adjustment reasons.
+- **Static data migration** – hard‑coded bike models / adjust reasons still live in `src/lib/constants.ts`.
+- **Dead auth files** `src/lib/auth‑client.ts`, `src/lib/auth‑rbac.ts`, `middleware.ts`, `neon.ts` – still present in repo and may be imported.
+- **Legacy crypto helpers** `hashPw`, `sha256` in `src/lib/store.ts` – should be replaced by native Web Crypto.
+- **Unused seed scripts** `scripts/seed-users.ts`, `scripts/seed-full-db.ts` – dead code.
+- **Missing RBAC tests** – no automated verification that each role respects its permission set.
+
+### Existing Pending Tasks (from previous log)
+- **Pending Task 1:** Execute Static Data Migration on Neon DB
+- **Pending Task 2:** Add API Endpoints `listBikeModels` & `listAdjustReasons`
+- **Pending Task 3:** Clean Up Unused Cryptographic Primitives from `store.ts`
+- **Pending Task 4:** Remove Unused Dead Files Identified in Ponytail Audit
 
 ### Pending Task 1: Execute Static Data Migration on Neon DB
 - **Reason / Situation**: Shift hard-coded bike models, adjust reasons, and destination types from code to Neon DB database tables.

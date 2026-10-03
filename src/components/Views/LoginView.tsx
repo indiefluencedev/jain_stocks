@@ -22,15 +22,21 @@ export const LoginView: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
+    setLoading(true);
     try {
-      login(username, password);
+      console.log('[LOGIN_VIEW] Submitting authentication form for username:', username);
+      await login(username, password);
+      console.log('[LOGIN_VIEW] Sign-in succeeded for:', username);
     } catch (err: any) {
+      console.error('[LOGIN_VIEW] Sign-in error:', err.message);
       setErrorMsg(err.message || 'Failed to sign in.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -115,8 +121,8 @@ export const LoginView: React.FC = () => {
 
           {errorMsg && <div className="login-err">{errorMsg}</div>}
 
-          <button className="btn primary" type="submit">
-            Sign in
+          <button className="btn primary" type="submit" disabled={loading}>
+            {loading ? 'Authenticating...' : 'Sign in'}
           </button>
 
           <div className="login-note">
