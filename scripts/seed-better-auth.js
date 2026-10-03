@@ -27,15 +27,15 @@ async function seedAccounts() {
       const id = crypto.randomUUID();
       await pool.query(
         'INSERT INTO "account" (id, "userId", "accountId", "providerId", password, "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, NOW(), NOW())',
-        [id, u.id, u.email || u.username, 'credential', hashedPw]
+        [id, u.id, u.id, 'credential', hashedPw]
       );
-      console.log('Inserted credential account for:', u.username, 'email:', u.email);
+      console.log('Inserted credential account for:', u.username, 'userId/accountId:', u.id);
     } else {
       await pool.query(
-        'UPDATE "account" SET password = $1, "updatedAt" = NOW() WHERE "userId" = $2 AND "providerId" = $3',
-        [hashedPw, u.id, 'credential']
+        'UPDATE "account" SET "accountId" = $1, password = $2, "updatedAt" = NOW() WHERE "userId" = $3 AND "providerId" = $4',
+        [u.id, hashedPw, u.id, 'credential']
       );
-      console.log('Updated credential account for:', u.username);
+      console.log('Updated credential account for:', u.username, 'userId/accountId:', u.id);
     }
   }
 
