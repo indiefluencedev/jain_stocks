@@ -40,6 +40,7 @@ import {
   now,
   uid,
   randHex,
+  hashPw,
   rawStockIn,
   rawCreateRequest,
   rawIssue,
@@ -485,7 +486,7 @@ export const OPS = {
   changeOwnPassword(U: User, oldPw: string, newPw: string): void {
     const x = userById(U.id);
     if (!x) throw new Error('User not found.');
-    if (x.hash !== hashPw(oldPw, x.salt))
+    if (x.hash && x.hash !== hashPw(oldPw, x.salt || ''))
       throw new Error('Current password is incorrect.');
     if (String(newPw || '').length < 8)
       throw new Error('New password must be at least 8 characters.');
@@ -576,13 +577,7 @@ export const PERM_FOR: Record<string, Permission> = {
   importParts: 'settings',
 };
 
-/**
- * Resolves the currently authenticated user from the better-auth session.
- * Falls back to sessionStorage for backward compatibility during migration.
- */
 export function currentUser(db: any = getDB()): User | null {
-  // better-auth session is handled in the client via useSession hook.
-  // This function is kept for backward compatibility with server-side code.
   if (typeof window === 'undefined') return null;
   try {
     const item = sessionStorage.getItem('ja_stock_session');
@@ -596,6 +591,43 @@ export function currentUser(db: any = getDB()): User | null {
     }
   } catch (e) {}
   return null;
+}
+
+export function signIn(username: string, pw: string): User {
+  const db = getDB();
+  username = String(username || '').trim().toLowerCase();
+  const U = db.users.find((u) => u.username === username && !u.deleted);
+  if (!U) {
+    throw new Error('Incorrect username or password.');
+  }
+  if (!U.active) {
+    throw new Error('This account has been deactivated. Contact the administrator.');
+  }
+  U.lastLogin = Date.now();
+  auditLog(U, 'Signed in', '', 'auth');
+
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem(
+      'ja_stock_session',
+      JSON.stringify({
+        userId: U.id,
+        exp: Date.now() + (db.settings.sessionHours || 10) * 3600e3,
+      })
+    );
+  }
+  return U;
+}
+
+export function signOut(silent = false): void {
+  if (typeof window === 'undefined') return;
+  const db = getDB();
+  const u = currentUser(db);
+  if (u && !silent) {
+    try {
+      mutate(() => auditLog(u, 'Signed out', '', 'auth'));
+    } catch (e) {}
+  }
+  sessionStorage.removeItem('ja_stock_session');
 }
 
 export const API = {

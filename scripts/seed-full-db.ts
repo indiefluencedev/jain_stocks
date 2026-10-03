@@ -36,9 +36,8 @@ async function seedFullDatabase() {
           ${u.role},
           ${u.username},
           ${u.phone || ""},
-          ${u.active ? "active" : "inactive"},
-          ${u.salt},
-          ${u.hash},
+          ${u.salt || ""},
+          ${u.hash || ""},
           ${new Date(u.createdAt).toISOString()},
           ${u.lastLogin ? new Date(u.lastLogin).toISOString() : null}
         )

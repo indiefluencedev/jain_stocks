@@ -29,8 +29,7 @@ import {
   isIssuable,
   seed,
 } from '@/lib/store';
-import { API, hasPerm } from '@/lib/ops';
-import { useSession, signIn, signOut, use } from 'better-auth/react';
+import { API, currentUser, signIn, signOut as authSignOut, hasPerm } from '@/lib/ops';
 
 interface ToastItem {
   id: string;
@@ -96,14 +95,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const refresh = () => {
     const loadedDb = loadStore();
     setDbState({ ...loadedDb });
-    const session = useSession();
-    if (session.data) {
-      // Update user from better-auth session
-      setUser(session.data.user as User | null);
-    } else {
-      const curr = currentUser(loadedDb);
-      setUser(curr ? { ...curr } : null);
-    }
+    const curr = currentUser(loadedDb);
+    setUser(curr ? { ...curr } : null);
   };
 
   useEffect(() => {
@@ -111,13 +104,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     fetchServerStore().then((serverDb) => {
       if (serverDb) {
         setDbState({ ...serverDb });
-        const session = useSession();
-        if (session.data) {
-          setUser(session.data.user as User | null);
-        } else {
-          const curr = currentUser(serverDb);
-          setUser(curr ? { ...curr } : null);
-        }
+        const curr = currentUser(serverDb);
+        setUser(curr ? { ...curr } : null);
       }
     });
 
@@ -148,13 +136,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const login = async (username: string, pw: string) => {
-    await signIn({ email: username, password: pw });
+  const login = (username: string, pw: string) => {
+    const u = signIn(username, pw);
     refresh();
   };
 
   const logout = () => {
-    signOut();
+    authSignOut(false);
     setUser(null);
     setModal(null);
     if (typeof window !== 'undefined') {
@@ -164,9 +152,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const can = (perm: Permission): boolean => {
-    const session = useSession();
-    if (!session.data?.user) return false;
-    return hasPerm(session.data.user as User, perm);
+    if (!user) return false;
+    return hasPerm(user, perm);
   };
 
   const apiCall = (action: any, ...args: any[]) => {
