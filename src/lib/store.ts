@@ -1,3 +1,17 @@
+/**
+ * @file src/lib/store.ts
+ * @description Core State Management, Persistence, Dynamic Double-Entry Ledger Equations, and Seed Generator.
+ * 
+ * Key Responsibilities:
+ * 1. Double-Entry Dynamic Stock Balance Equation: Stock(P, T) = Sum(qty of ledger rows where part_id = P)
+ * 2. Destination Holding Balance Equation: Holding(D, P) = -Sum(qty of ledger rows where destination_id = D)
+ * 3. Cache Invalidation & Synchronized LocalStorage + Neon DB Persistence (`saveStore`, `fetchServerStore`)
+ * 4. Password hashing using PBKDF-style SHA-256 iterations
+ * 5. Re-order status calculation (`statusOf`) & Sequential voucher counter incrementer (`nextNo`)
+ * 
+ * @module Store
+ */
+
 import { Database, User, Part, Destination, LedgerRow, StockRequest, Challan, Inward, AuditLog, StockStatus } from '@/types';
 import { ROLES, SUPER_PW, DEMO_PW, STATUS_L } from './constants';
 
@@ -7,6 +21,7 @@ export const SESSION_KEY = 'ja_stock_session';
 const DAY = 86400000;
 let CLOCK: number | null = null;
 export const now = (): number => CLOCK || Date.now();
+
 
 export function randHex(n: number): string {
   const a = new Uint8Array(n);
@@ -300,6 +315,14 @@ export function loadStore(): Database {
 }
 
 
+/**
+ * Atomic Transaction Mutation Wrapper.
+ * 
+ * Provides ACID-like atomicity for database state updates.
+ * Creates an in-memory snapshot before running the mutation callback `fn`.
+ * If an error occurs during execution, it automatically rolls back state to the snapshot.
+ * Upon success, it persists changes to LocalStorage & Neon PostgreSQL server, and invalidates cache.
+ */
 export function mutate<T>(fn: (db: Database) => T): T {
   const d = readStore();
   if (d) DB = d;
@@ -317,6 +340,16 @@ export function mutate<T>(fn: (db: Database) => T): T {
   }
 }
 
+/**
+ * Master Dynamic Live Stock Equation.
+ * 
+ * Stock is NEVER stored as a static, mutable integer column.
+ * Live stock for part `P` is dynamically calculated by summing all movement quantities `r.qty`
+ * across the master immutable ledger:
+ * Stock(P) = Sum(ledger.qty where partId == P)
+ * 
+ * @returns Hashmap of Part ID -> Dynamic Live Quantity
+ */
 export function balances(db: Database = DB): Record<string, number> {
   if (_bal && db === DB) return _bal;
   const b: Record<string, number> = {};
@@ -327,9 +360,21 @@ export function balances(db: Database = DB): Record<string, number> {
   return b;
 }
 
+/** Returns live stock quantity for a single part ID */
 export const stockOf = (id: string, db: Database = DB): number =>
   balances(db)[id] || 0;
 
+/**
+ * Destination Stock Holding Equation.
+ * 
+ * Calculates parts currently held by specific Destination bikes, workshop bays, or offsite godowns:
+ * Holding(Destination, Part) = -Sum(ledger.qty where destinationId == Destination and partId == Part)
+ * 
+ * Note: Since ISSUE movements store negative quantities (-Q) in the ledger,
+ * negating the sum yields the positive quantity currently held at the destination.
+ * 
+ * @returns Map of Destination ID -> Map of Part ID -> Quantity Held
+ */
 export function holdings(
   db: Database = DB
 ): Record<string, Record<string, number>> {
@@ -359,6 +404,9 @@ export const userById = (id: string, db: Database = DB): User | undefined =>
 export const activeParts = (db: Database = DB): Part[] =>
   db.parts.filter((p) => p.active !== false);
 
+/**
+ * Computes Stock Level Alert Status ('out' | 'low' | 'over' | 'ok') against minQty / maxQty threshold settings.
+ */
 export function statusOf(p: Part, q: number): StockStatus {
   if (q <= 0) return 'out';
   if (q <= (Number(p.minQty) || 0)) return 'low';
@@ -368,6 +416,7 @@ export function statusOf(p: Part, q: number): StockStatus {
 
 export function reversedSet(db: Database = DB): Set<string> {
   return new Set(
+
     db.ledger.filter((r) => r.reversesId).map((r) => r.reversesId as string)
   );
 }

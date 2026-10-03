@@ -1,3 +1,13 @@
+/**
+ * @file src/components/Layout/Sidebar.tsx
+ * @description Dynamic Role-Based Navigation Sidebar Component.
+ * 
+ * Filters and renders navigation tabs based on the active user's role permissions (`can(perm)`).
+ * Displays badge counters for pending requests requiring attention.
+ * 
+ * @module SidebarComponent
+ */
+
 'use client';
 
 import React from 'react';
@@ -21,21 +31,29 @@ import {
 } from 'lucide-react';
 import { Permission } from '@/types';
 
+/**
+ * Navigation item specification contract.
+ */
 interface NavItem {
   key: string;
   label: string;
   shortLabel?: string;
   icon: React.ReactNode;
   group: 'Overview' | 'Operations' | 'Traceability' | 'Admin';
-  perm?: Permission;
-  any?: Permission[];
+  perm?: Permission;       // Single required permission
+  any?: Permission[];      // Array of permissions (matches if user has at least one)
 }
 
+/**
+ * Dynamic Sidebar Navigation Component.
+ * Automatically adapts tab visibility according to user role authorization.
+ */
 export const Sidebar: React.FC = () => {
   const { db, user, activeRoute, setRoute, logout, openCount, can } = useApp();
 
   if (!user) return null;
 
+  /** Master list of navigation routes with group and permission definitions */
   const NAV_ITEMS: NavItem[] = [
     { key: 'dashboard', label: 'Dashboard', icon: <LayoutGrid size={20} />, group: 'Overview' },
     { key: 'inventory', label: 'Inventory', icon: <Box size={20} />, group: 'Overview' },
@@ -51,6 +69,7 @@ export const Sidebar: React.FC = () => {
     { key: 'settings', label: 'Settings & Data', shortLabel: 'Settings', icon: <Settings size={20} />, group: 'Admin', perm: 'settings' },
   ];
 
+  /** Evaluates if the active user is authorized to see a specific navigation item */
   const isAllowed = (item: NavItem) => {
     if (item.perm && !can(item.perm)) return false;
     if (item.any && !item.any.some((p) => can(p))) return false;
@@ -58,6 +77,7 @@ export const Sidebar: React.FC = () => {
   };
 
   const allowedItems = NAV_ITEMS.filter(isAllowed);
+
 
   let currentGroup = '';
   const renderedItems: React.ReactNode[] = [];

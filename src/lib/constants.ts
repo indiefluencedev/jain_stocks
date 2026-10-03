@@ -1,3 +1,10 @@
+/**
+ * @file src/lib/constants.ts
+ * @description System-wide constants, master role definitions, display labels, color maps, and bike model lists.
+ * 
+ * @module Constants
+ */
+
 import {
   Permission,
   Role,
@@ -8,6 +15,10 @@ import {
   StockStatus,
 } from '@/types';
 
+/**
+ * Human-readable description labels for each of the 17 system permissions.
+ * Used in User Management forms and UI role detail modals.
+ */
 export const PERMS: Record<Permission, string> = {
   view: 'View live stock and catalogue',
   see_value: 'See stock value and prices',
@@ -28,16 +39,20 @@ export const PERMS: Record<Permission, string> = {
   settings: 'System settings and data',
 };
 
+/**
+ * Master Role Configurations & Permission Arrays.
+ * Matches the RBAC matrix enforced throughout the app.
+ */
 export const ROLES: Record<Role, RoleInfo> = {
   super_admin: {
     label: 'Super Admin',
     perms: '*',
-    desc: 'Highest system authority',
+    desc: 'Highest system authority with full administrative & database rights',
   },
   owner: {
     label: 'Owner',
     perms: '*',
-    desc: 'Highest business authority',
+    desc: 'Highest business authority with complete operational & financial rights',
   },
   sales_manager: {
     label: 'Sales Manager',
@@ -96,6 +111,9 @@ export const ROLES: Record<Role, RoleInfo> = {
   },
 };
 
+/**
+ * Royal Enfield Motorcycle Models supported in catalogue and destination tracking.
+ */
 export const MODELS: string[] = [
   'Universal',
   'Classic 350',
@@ -113,6 +131,9 @@ export const MODELS: string[] = [
   'Bear 650',
 ];
 
+/**
+ * Display labels for Destination Types.
+ */
 export const DEST_TYPES: Record<DestinationType, string> = {
   customer_vehicle: 'Customer vehicle',
   counter_sale: 'Counter sale',
@@ -121,6 +142,9 @@ export const DEST_TYPES: Record<DestinationType, string> = {
   offsite: 'Offsite storage',
 };
 
+/**
+ * Movement Type Visual Configurations: [Display Label, UI Badge Color, Icon Key].
+ */
 export const MV: Record<
   MovementType,
   [label: string, badgeColor: string, iconName: string]
@@ -133,6 +157,9 @@ export const MV: Record<
   REVERSAL: ['Reversal', 'red', 'undo'],
 };
 
+/**
+ * Request Status Badge Color Mapping.
+ */
 export const REQ_B: Record<RequestStatus, string> = {
   Requested: 'amber',
   Approved: 'blue',
@@ -143,6 +170,9 @@ export const REQ_B: Record<RequestStatus, string> = {
   Cancelled: 'muted',
 };
 
+/**
+ * Stock Alert Level Configurations: [Display Label, UI Badge Color].
+ */
 export const STATUS_L: Record<StockStatus, [label: string, color: string]> = {
   out: ['Out of stock', 'red'],
   low: ['Low stock', 'amber'],
@@ -150,6 +180,9 @@ export const STATUS_L: Record<StockStatus, [label: string, color: string]> = {
   ok: ['In stock', 'green'],
 };
 
+/**
+ * Predefined Standard Reasons for Physical Inventory Stock Count Adjustments.
+ */
 export const ADJ_REASONS: string[] = [
   'Physical count correction',
   'Damaged in store',
@@ -158,5 +191,8 @@ export const ADJ_REASONS: string[] = [
   'Other',
 ];
 
+/** Default password for operational test roles */
 export const DEMO_PW = 'Demo@2026';
+
+/** Default password for Super Admin account */
 export const SUPER_PW = 'Jain@11614';

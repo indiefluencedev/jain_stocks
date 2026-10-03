@@ -1,3 +1,19 @@
+/**
+ * @file src/lib/ops.ts
+ * @description Master Operations API Layer & Transaction Controller.
+ * 
+ * Provides transactional methods for stock movements, audit logging, authorization enforcement, and CRUD updates:
+ * 1. Authentication & Session Management (`signIn`, `signOut`, `currentUser`)
+ * 2. Immutable Audit Trail Logging (`auditLog`)
+ * 3. Inward Stock GRN Receiving (`rawStockIn`)
+ * 4. Stock Request Creation & Approval State Transitions (`rawCreateRequest`, `approveRequest`, `rejectRequest`)
+ * 5. Stock Issuance & Delivery Challan Generation (`rawIssue`)
+ * 6. Returns & Stock Adjustments (`rawReturnStock`, `rawAdjust`)
+ * 7. Protected Ledger Reversals (`reverseLedgerRow`)
+ * 
+ * @module Ops
+ */
+
 import {
   User,
   Part,
@@ -38,11 +54,18 @@ import {
 } from './store';
 import { ROLES, DEST_TYPES, MV, ADJ_REASONS } from './constants';
 
+/**
+ * Checks whether a given user holds a specific permission according to their assigned role.
+ */
 export function hasPerm(U: User, p: Permission): boolean {
   const r = ROLES[U.role];
   return Boolean(r && (r.perms === '*' || r.perms.includes(p)));
 }
 
+/**
+ * Records an entry into the immutable system Audit Trail.
+ * Logged details include performer User ID, Name, Role, Action, Detail, and Entity reference.
+ */
 export function auditLog(
   U: User | null,
   action: string,
@@ -58,6 +81,7 @@ export function auditLog(
     role: U ? (ROLES[U.role] || {}).label || '' : '',
     action,
     detail: detail || '',
+
     entity: entity || '',
   });
 }

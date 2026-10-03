@@ -1,3 +1,17 @@
+/**
+ * @file src/context/AppContext.tsx
+ * @description Global React Application State Provider & Central Hook Context.
+ * 
+ * Provides centralized reactive state and hooks across the application:
+ * 1. Global Database Instance (`db`) and Active Authenticated User (`user`).
+ * 2. Hash-based Client Router state (`activeRoute`, `setRoute`).
+ * 3. Dynamic Permission Hook (`can(perm)`).
+ * 4. Transaction API Facade (`apiCall(action, ...args)`).
+ * 5. UI Feedback Controllers (Toast notifications, Dynamic Modals, Prompt dialogs).
+ * 
+ * @module AppContext
+ */
+
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
@@ -31,6 +45,9 @@ export interface ModalOptions {
   foot?: ReactNode;
 }
 
+/**
+ * Global App Context Contract containing application state and methods.
+ */
 interface AppContextType {
   db: Database;
   user: User | null;
@@ -65,6 +82,7 @@ interface AppContextType {
 }
 
 const AppContext = createContext<AppContextType | null>(null);
+
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [db, setDbState] = useState<Database>(baseDB());
