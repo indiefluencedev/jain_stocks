@@ -1,8 +1,22 @@
+/**
+ * @file src/app/api/db/route.ts
+ * @description Next.js Route Handler for Serverless Neon PostgreSQL Database Synchronization.
+ * 
+ * Provides GET & POST endpoints to synchronize application state with Neon DB:
+ * - GET: Retrieves the `full_store` JSON snapshot from `app_state` table.
+ * - POST: Upserts the `full_store` snapshot and relationally syncs `parts`, `destinations`, and `user` tables.
+ * 
+ * @module ApiDbRoute
+ */
+
 import { NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 
 const databaseUrl = process.env.DATABASE_URL || process.env.NEXT_NEON_DB_URI;
 
+/**
+ * GET Handler - Reads full application state snapshot from Neon DB.
+ */
 export async function GET() {
   if (!databaseUrl) {
     return NextResponse.json({ error: 'DATABASE_URL is missing' }, { status: 500 });
@@ -21,6 +35,9 @@ export async function GET() {
   }
 }
 
+/**
+ * POST Handler - Synchronizes snapshot and relational entity tables in Neon DB.
+ */
 export async function POST(req: Request) {
   if (!databaseUrl) {
     return NextResponse.json({ error: 'DATABASE_URL is missing' }, { status: 500 });

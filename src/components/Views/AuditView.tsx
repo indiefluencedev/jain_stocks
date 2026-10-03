@@ -1,3 +1,15 @@
+/**
+ * @file src/components/Views/AuditView.tsx
+ * @description System Audit Trail Inspection & Export View Component.
+ * 
+ * Features:
+ * 1. Filterable list of all system audit logs (`db.audit`).
+ * 2. Details per action: Timestamp, Performer Name, Role, Executed Action, Detail note.
+ * 3. Export audit logs to CSV (`can('export')`).
+ * 
+ * @module AuditViewComponent
+ */
+
 'use client';
 
 import React, { useState } from 'react';
@@ -8,8 +20,10 @@ import { Badge } from '../UI/Badge';
 import { Search, Download } from 'lucide-react';
 import { AuditLog } from '@/types';
 
+/** Audit Trail Inspection View Component */
 export const AuditView: React.FC = () => {
   const { db, can } = useApp();
+
   const [q, setQ] = useState('');
 
   const rows = db.audit

@@ -1,3 +1,16 @@
+/**
+ * @file src/components/Views/LedgerView.tsx
+ * @description Master Immutable Stock Ledger History View Component.
+ * 
+ * Features:
+ * 1. Complete Double-Entry Stock Movement History table with filters (Search query, Movement type, Date range).
+ * 2. Balance before/after audit tracking (`before`, `after`).
+ * 3. Ledger Row Reversals (`can('reverse')`) with audit reason prompts.
+ * 4. Export ledger data to CSV (`can('export')`).
+ * 
+ * @module LedgerViewComponent
+ */
+
 'use client';
 
 import React, { useState } from 'react';
@@ -11,8 +24,10 @@ import { LedgerRow } from '@/types';
 
 const DAY = 86400000;
 
+/** Master Stock Ledger View Component */
 export const LedgerView: React.FC = () => {
   const { db, can, apiCall, showToast, ask } = useApp();
+
 
   const [q, setQ] = useState('');
   const [type, setType] = useState('');

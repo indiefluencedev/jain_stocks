@@ -1,14 +1,28 @@
+/**
+ * @file src/components/Views/LoginView.tsx
+ * @description User Authentication & Login Portal Component.
+ * 
+ * Features:
+ * 1. Secure Credential Form (Username, Password, Show/Hide Password toggle).
+ * 2. Brute-force lockout error message display.
+ * 3. Fast One-Click Demo Role Selector to easily log in as any of the 9 roles.
+ * 
+ * @module LoginViewComponent
+ */
+
 'use client';
 
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 
+/** Login Screen Component */
 export const LoginView: React.FC = () => {
   const { login } = useApp();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

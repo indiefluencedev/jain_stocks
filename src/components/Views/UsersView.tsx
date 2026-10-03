@@ -1,3 +1,16 @@
+/**
+ * @file src/components/Views/UsersView.tsx
+ * @description User Account & Employee Role Administration View Component.
+ * 
+ * Features:
+ * 1. User Account Listing with assigned Role badge, status, and last login timestamp.
+ * 2. Create User Modal (`can('users_manage')`) assigning roles (`sales_rep`, `storekeeper`, `sales_manager`, etc.).
+ * 3. Password Reset Controller (`resetPassword`).
+ * 4. Account Activation / Deactivation.
+ * 
+ * @module UsersViewComponent
+ */
+
 'use client';
 
 import React from 'react';
@@ -10,8 +23,10 @@ import { Badge } from '../UI/Badge';
 import { Plus, Edit2, Key, Check } from 'lucide-react';
 import { User, Role } from '@/types';
 
+/** User Management Administration View Component */
 export const UsersView: React.FC = () => {
   const { db, user: currentUser, apiCall, showToast, openModal, closeModal, ask } = useApp();
+
 
   if (!currentUser) return null;
 

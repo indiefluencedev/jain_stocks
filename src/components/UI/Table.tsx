@@ -1,23 +1,45 @@
+/**
+ * @file src/components/UI/Table.tsx
+ * @description Generic Reusable Data Table Component.
+ * 
+ * Provides responsive tabular rendering with mobile card view transformation:
+ * - Dynamic column specifications (`Column<T>`).
+ * - Custom cell renderers (`render`) and value formatters (`format`).
+ * - Row selection/click handling (`onRowClick`).
+ * - Empty state fallback text rendering.
+ * 
+ * @module TableComponent
+ */
+
 import React, { ReactNode } from 'react';
 
+/**
+ * Table Column Definition Contract.
+ */
 export interface Column<T> {
-  label: string;
-  key?: keyof T;
-  num?: boolean;
-  cls?: string;
-  render?: (row: T) => ReactNode;
-  format?: (val: any, row: T) => ReactNode;
+  label: string;                        // Header title text
+  key?: keyof T;                        // Object property key
+  num?: boolean;                        // Align numeric values to the right
+  cls?: string;                         // Additional CSS class name
+  render?: (row: T) => ReactNode;       // Custom cell JSX rendering callback
+  format?: (val: any, row: T) => ReactNode; // Formatter callback for raw value
 }
 
+/**
+ * Table Component Props Interface.
+ */
 interface TableProps<T> {
-  columns: Column<T>[];
-  data: T[];
-  emptyText?: string;
-  cards?: boolean;
-  onRowClick?: (row: T) => void;
-  getRowKey?: (row: T, idx: number) => string | number;
+  columns: Column<T>[];                 // Array of column definitions
+  data: T[];                            // Array of data row objects
+  emptyText?: string;                   // Text displayed when data array is empty
+  cards?: boolean;                      // Enable responsive card styling on mobile
+  onRowClick?: (row: T) => void;        // Row click event listener
+  getRowKey?: (row: T, idx: number) => string | number; // Unique row key generator
 }
 
+/**
+ * Reusable Data Table Component.
+ */
 export function Table<T extends Record<string, any>>({
   columns,
   data,

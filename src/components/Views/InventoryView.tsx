@@ -1,3 +1,17 @@
+/**
+ * @file src/components/Views/InventoryView.tsx
+ * @description Master Parts Catalogue & Inventory Management View.
+ * 
+ * Features:
+ * 1. Filterable Parts Catalogue (Search query, Category, Bike Model, Stock Status).
+ * 2. RBAC Masking: Purchase cost price & total value columns visible only to `see_value` permission.
+ * 3. Part Master Editor Modal (Create/Edit Part Code, SKU, Rack Location, Pricing, Thresholds).
+ * 4. Part Detail Inspection Modal with historical movement timeline.
+ * 5. Export catalogue data to CSV (`can('export')`).
+ * 
+ * @module InventoryViewComponent
+ */
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -13,6 +27,7 @@ interface InventoryViewProps {
   onGoStockIn?: (partId: string) => void;
 }
 
+/** Master Inventory & Parts View Component */
 export const InventoryView: React.FC<InventoryViewProps> = ({ onGoStockIn }) => {
   const { db, can, apiCall, showToast, openModal, closeModal, setRoute } = useApp();
 
@@ -20,6 +35,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onGoStockIn }) => 
   const [cat, setCat] = useState('');
   const [model, setModel] = useState('');
   const [st, setSt] = useState('');
+
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

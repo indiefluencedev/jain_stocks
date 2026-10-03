@@ -1,13 +1,27 @@
+/**
+ * @file src/components/UI/ModalRoot.tsx
+ * @description Global Accessible Modal & Confirmation Dialog Host Component.
+ * 
+ * Subscribes to `AppContext` to render dynamic modal dialogs (`modal`) and confirmation prompts (`askModal`).
+ * Handles backdrop clicks, ESC key close triggers, custom text inputs, and primary/danger action buttons.
+ * 
+ * @module ModalRootComponent
+ */
+
 'use client';
 
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { X } from 'lucide-react';
 
+/**
+ * Global Modal Root Component mounted in `RootLayout`.
+ */
 export const ModalRoot: React.FC = () => {
   const { modal, closeModal, askModal } = useApp();
   const [askInputValue, setAskInputValue] = useState('');
 
+  // 1. Render Confirmation / Prompt Dialog if active
   if (askModal) {
     return (
       <div
@@ -69,6 +83,7 @@ export const ModalRoot: React.FC = () => {
     );
   }
 
+  // 2. Render Custom Modal content if active
   if (!modal) return null;
 
   return (

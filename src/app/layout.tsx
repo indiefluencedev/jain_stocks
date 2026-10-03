@@ -1,3 +1,13 @@
+/**
+ * @file src/app/layout.tsx
+ * @description Next.js App Router Root Layout Component.
+ * 
+ * Provides global HTML wrapper structure, custom typography fonts (DM Sans, Rajdhani),
+ * global CSS styling, and mounts global Providers (`AppProvider`, `ModalRoot`, `ToastRoot`).
+ * 
+ * @module RootLayout
+ */
+
 import type { Metadata } from 'next';
 import { DM_Sans, Rajdhani } from 'next/font/google';
 import './globals.css';
@@ -19,15 +29,20 @@ const rajdhani = Rajdhani({
   display: 'swap',
 });
 
+/** SEO Metadata for the Application */
 export const metadata: Metadata = {
   title: 'Jain Automobiles · Stock Management',
   description: 'Authorised Royal Enfield Dealer · GMA & Parts Stock Management System',
 };
 
+/** Viewport theme settings */
 export const viewport = {
   themeColor: '#0e0e10',
 };
 
+/**
+ * Root Layout Component wrapping all application pages.
+ */
 export default function RootLayout({
   children,
 }: Readonly<{

@@ -1,3 +1,16 @@
+/**
+ * @file src/components/UI/LinesEditor.tsx
+ * @description Dynamic Line-Item Form Editor for Stock Requests, Stock-In & Returns.
+ * 
+ * Provides an interactive line-item list editor with:
+ * 1. Autocomplete part lookup against the master part catalogue (`dl-parts`).
+ * 2. Real-time live stock display (`checkStock`).
+ * 3. Returnable quantity constraint checks (`maxReturnableMap`).
+ * 4. Add/Remove line item handlers.
+ * 
+ * @module LinesEditorComponent
+ */
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -5,6 +18,7 @@ import { useApp } from '@/context/AppContext';
 import { activeParts, resolvePart, stockOf } from '@/lib/store';
 import { Plus, X } from 'lucide-react';
 
+/** Line Item State Schema */
 export interface LineItem {
   id: string;
   partInput: string;
@@ -18,6 +32,9 @@ interface LinesEditorProps {
   checkStock?: boolean;
 }
 
+/**
+ * Interactive Line Item Form Component.
+ */
 export const LinesEditor: React.FC<LinesEditorProps> = ({
   lines,
   onChange,

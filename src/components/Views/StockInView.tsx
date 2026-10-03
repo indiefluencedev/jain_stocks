@@ -1,3 +1,16 @@
+/**
+ * @file src/components/Views/StockInView.tsx
+ * @description Inward Stock Receipt (GRN Goods Received Note) View Component.
+ * 
+ * Facilitates registering inward stock shipments received from Royal Enfield / GMA suppliers:
+ * 1. Form fields: Supplier Invoice Number, Invoice Date, Supplier Name, Remarks.
+ * 2. Multi-line part intake using `LinesEditor`.
+ * 3. Atomic transaction execution (`rawStockIn`) creating positive `IN` ledger entries (+Q).
+ * 4. Recent Goods Received Notes (GRN) history list.
+ * 
+ * @module StockInViewComponent
+ */
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -11,8 +24,10 @@ interface StockInViewProps {
   onClearPrefill?: () => void;
 }
 
+/** Inward Stock Entry View Component */
 export const StockInView: React.FC<StockInViewProps> = ({ prefillPartId, onClearPrefill }) => {
   const { db, user, apiCall, showToast } = useApp();
+
 
   const [invoiceNo, setInvoiceNo] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(isoDate(Date.now()));

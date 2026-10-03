@@ -1,3 +1,17 @@
+/**
+ * @file src/components/Views/RequestsView.tsx
+ * @description Stock Requests Pipeline & Fulfillment Management View Component.
+ * 
+ * Features:
+ * 1. Filterable Stock Requests List (Status tabs: All, Open, Approved, Issued, Rejected).
+ * 2. Raise Stock Request Modal (`can('create_request')`) targeting specific Destination bikes/workshop bays.
+ * 3. Manager Approval & Rejection Actions (`can('approve_request')`).
+ * 4. Storekeeper Stock Issue Modal (`can('issue')`) generating Delivery Challans and updating ledger balances.
+ * 5. Scoped Visibility for Sales Reps (`sales_rep` only views personal requests).
+ * 
+ * @module RequestsViewComponent
+ */
+
 'use client';
 
 import React, { useState } from 'react';
@@ -22,7 +36,9 @@ interface RequestsViewProps {
   initialDirectIssue?: boolean;
 }
 
+/** Stock Requests & Fulfillment View Component */
 export const RequestsView: React.FC<RequestsViewProps> = ({
+
   initialDirectIssue = false,
 }) => {
   const { db, user, can, apiCall, showToast, openModal, closeModal, setRoute } = useApp();

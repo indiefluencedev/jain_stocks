@@ -1,3 +1,16 @@
+/**
+ * @file src/components/UI/ChallanPaper.tsx
+ * @description Printable Official Delivery Challan Document Template.
+ * 
+ * Renders an official printable invoice layout for stock issued from central warehouse:
+ * - Dealership Header, Dealer Code & Branch details.
+ * - Issue Metadata (Challan No, Request No, Destination, Chassis No, Bike Model, Sales Invoice, Customer Name).
+ * - Itemized issued parts table with total quantity tally.
+ * - Signature placeholders (Issued By, Requested By, Received By).
+ * 
+ * @module ChallanPaperComponent
+ */
+
 import React from 'react';
 import { Challan, Settings } from '@/types';
 import { fmtDT } from '@/lib/store';
@@ -7,6 +20,7 @@ interface ChallanPaperProps {
   settings: Settings;
 }
 
+/** Printable Delivery Challan Paper Document Component */
 export const ChallanPaper: React.FC<ChallanPaperProps> = ({ challan, settings }) => {
   return (
     <div className="paper">

@@ -1,3 +1,15 @@
+/**
+ * @file src/app/page.tsx
+ * @description Main Single Page Application Router & Shell Component.
+ * 
+ * Functions as the central route controller for the entire application:
+ * 1. Unauthenticated users are presented with the `LoginView`.
+ * 2. Authenticated users are presented with the main application Shell (`Sidebar`, `Topbar`, `BottomNav`).
+ * 3. Switches active view components dynamically according to `activeRoute` and permission rules (`can(perm)`).
+ * 
+ * @module AppShell
+ */
+
 'use client';
 
 import React, { useState } from 'react';
@@ -20,14 +32,19 @@ import { UsersView } from '@/components/Views/UsersView';
 import { AuditView } from '@/components/Views/AuditView';
 import { SettingsView } from '@/components/Views/SettingsView';
 
+/**
+ * Main Single-Page Application Component.
+ */
 export default function Home() {
   const { user, activeRoute, setRoute, can } = useApp();
   const [stockInPrefillPartId, setStockInPrefillPartId] = useState<string | null>(null);
 
+  // Unauthenticated guard: Render login screen if no user session exists
   if (!user) {
     return <LoginView />;
   }
 
+  /** Resolves page title string for Topbar header based on active route key */
   const getRouteTitle = (key: string): string => {
     const titles: Record<string, string> = {
       dashboard: 'Dashboard',
@@ -46,6 +63,7 @@ export default function Home() {
     return titles[key] || 'Dashboard';
   };
 
+  /** Dynamically selects the view component to render based on route key and authorization */
   const renderActiveView = () => {
     switch (activeRoute) {
       case 'dashboard':

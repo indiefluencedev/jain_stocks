@@ -1,3 +1,18 @@
+/**
+ * @file src/components/Views/ReportsView.tsx
+ * @description Reports, Financial Stock Valuation & Analytics View Component.
+ * 
+ * Features:
+ * 1. Financial Stock Valuation Summary (`can('see_value')`).
+ * 2. Category & Model-wise Inventory Breakdown.
+ * 3. Dead Stock / Slow Moving Inventory Analysis.
+ * 4. Fast Moving Parts Velocity Analysis.
+ * 5. Destination Stock Holding Analytics.
+ * 6. Exportable Data Sheets in CSV format.
+ * 
+ * @module ReportsViewComponent
+ */
+
 'use client';
 
 import React, { useState } from 'react';
@@ -23,6 +38,7 @@ import { Badge } from '../UI/Badge';
 import { BarChart3, Download, ArrowLeft, Search } from 'lucide-react';
 
 const DAY = 86400000;
+
 
 export const ReportsView: React.FC = () => {
   const { db, can } = useApp();

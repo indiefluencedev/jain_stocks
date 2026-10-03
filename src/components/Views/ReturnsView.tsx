@@ -1,3 +1,16 @@
+/**
+ * @file src/components/Views/ReturnsView.tsx
+ * @description Stock Returns & Inventory Adjustments View Component.
+ * 
+ * Features:
+ * 1. Process Stock Returns (`can('return')`) from Destination bikes/bays back into warehouse (+Q).
+ * 2. Challan-linked Return validation (`challanReturnable`).
+ * 3. Physical Stock Count Adjustments (`can('adjust')`) with standard adjustment reasons.
+ * 4. Protected Historical Ledger Reversals (`can('reverse')`) with mandatory audit reason logging.
+ * 
+ * @module ReturnsViewComponent
+ */
+
 'use client';
 
 import React, { useState } from 'react';
@@ -17,8 +30,10 @@ import { MovementBadge } from '../UI/Badge';
 import { RotateCcw, Check, Undo2, Edit2 } from 'lucide-react';
 import { Challan, Destination } from '@/types';
 
+/** Stock Returns & Count Adjustments View Component */
 export const ReturnsView: React.FC = () => {
   const { db, user, can, apiCall, showToast } = useApp();
+
 
   const tabs: ['return' | 'adjust', string][] = [];
   if (can('return')) tabs.push(['return', 'Return to warehouse']);

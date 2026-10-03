@@ -1,3 +1,15 @@
+/**
+ * @file src/components/Views/DestinationsView.tsx
+ * @description Destinations, Bikes & Workshop Bays Tracking View Component.
+ * 
+ * Features:
+ * 1. Chassis Number / Frame Lookup: View complete parts fitting history for specific customer bikes.
+ * 2. Real-time Destination Holding balances: Shows parts currently installed/held on display bikes or workshop bays.
+ * 3. Create & Edit Destinations (`can('destinations_edit')`).
+ * 
+ * @module DestinationsViewComponent
+ */
+
 'use client';
 
 import React, { useState } from 'react';
@@ -10,8 +22,10 @@ import { MovementBadge } from '../UI/Badge';
 import { Bike, Search, Plus, MapPin } from 'lucide-react';
 import { Destination, LedgerRow } from '@/types';
 
+/** Destinations & Bikes Tracking View Component */
 export const DestinationsView: React.FC = () => {
   const { db, can, apiCall, showToast, openModal, closeModal } = useApp();
+
   const [chassisQuery, setChassisQuery] = useState('');
 
   const h = holdings(db);

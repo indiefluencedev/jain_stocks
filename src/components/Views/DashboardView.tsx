@@ -1,3 +1,16 @@
+/**
+ * @file src/components/Views/DashboardView.tsx
+ * @description Main Executive & Operational Stock Dashboard View.
+ * 
+ * Renders summary metrics, quick action triggers, low stock alerts, and recent ledger activity:
+ * 1. Summary Cards (Total Active Parts, Low Stock Count, Out of Stock Count, Total Stock Valuation).
+ * 2. Financial values masked unless user holds `see_value` permission.
+ * 3. Fast Part Stock Lookup search box.
+ * 4. Critical Re-order Alert list & Recent Stock Movements feed.
+ * 
+ * @module DashboardViewComponent
+ */
+
 'use client';
 
 import React, { useState } from 'react';
@@ -30,11 +43,13 @@ interface DashboardViewProps {
   onNewRequest: (directIssue?: boolean) => void;
 }
 
+/** Dashboard Overview View Component */
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNewRequest }) => {
   const { db, user, setRoute, can } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
 
   if (!user) return null;
+
 
   const parts = activeParts(db);
   const bal = balances(db);

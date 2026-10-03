@@ -1,3 +1,15 @@
+/**
+ * @file src/components/Views/ChallansView.tsx
+ * @description Delivery Challans Master List & Printing View Component.
+ * 
+ * Features:
+ * 1. Displays all issued official Delivery Challan documents (`db.challans`).
+ * 2. Preview & Print Challan Modal (`ChallanPaper`) with window print trigger.
+ * 3. Export Challan registers to CSV (`can('export')`).
+ * 
+ * @module ChallansViewComponent
+ */
+
 'use client';
 
 import React from 'react';
@@ -9,8 +21,10 @@ import { ChallanPaper } from '../UI/ChallanPaper';
 import { FileText, Download, Printer } from 'lucide-react';
 import { Challan } from '@/types';
 
+/** Delivery Challans Register View Component */
 export const ChallansView: React.FC = () => {
   const { db, can, openModal, closeModal } = useApp();
+
 
   const challans = db.challans.slice().reverse();
 

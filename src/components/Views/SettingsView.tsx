@@ -1,3 +1,16 @@
+/**
+ * @file src/components/Views/SettingsView.tsx
+ * @description System Settings & Data Operations View Component.
+ * 
+ * Features:
+ * 1. Dealership Settings (Branch Name, Dealer Code, Approval Required Toggle, Session Timeout).
+ * 2. Database Backup & Restore (JSON Export / Import).
+ * 3. Database Re-seeding (`seed()`) and Factory Reset.
+ * 4. Sample CSV Data Generator for Parts, Users, and Stock Movements.
+ * 
+ * @module SettingsViewComponent
+ */
+
 'use client';
 
 import React, { useState } from 'react';
@@ -18,8 +31,10 @@ import { STATUS_L, ROLES } from '@/lib/constants';
 import { Download, Upload, Sheet, Check, RefreshCw, Trash2 } from 'lucide-react';
 import { Database } from '@/types';
 
+/** System Settings & Data Tools View Component */
 export const SettingsView: React.FC = () => {
   const { db, user, apiCall, showToast, refresh, ask } = useApp();
+
 
   const [approvalRequired, setApprovalRequired] = useState(
     db.settings.approvalRequired

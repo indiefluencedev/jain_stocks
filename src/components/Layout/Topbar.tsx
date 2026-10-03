@@ -1,3 +1,12 @@
+/**
+ * @file src/components/Layout/Topbar.tsx
+ * @description Top Header Navigation Bar Component.
+ * 
+ * Displays active page title, system live badge, mobile brand mark, and account user button.
+ * 
+ * @module TopbarComponent
+ */
+
 'use client';
 
 import React from 'react';
@@ -5,9 +14,10 @@ import { useApp } from '@/context/AppContext';
 import { User as UserIcon } from 'lucide-react';
 
 interface TopbarProps {
-  title: string;
+  title: string; // Active page title string
 }
 
+/** Topbar Header Component */
 export const Topbar: React.FC<TopbarProps> = ({ title }) => {
   const { user, setRoute } = useApp();
 
