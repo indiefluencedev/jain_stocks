@@ -8,8 +8,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-# Mandatory Task & Improvement Logging Rule
+# Mandatory Agent Rules
 
+## 1. Task & Improvement Logging System Rule
 All agents MUST follow the task logging system in `.agent/tasks/`:
 - **`.agent/tasks/tasks.md`**: Single Source of Truth (SSOT) for all accomplished (`[x]`) and pending (`[ ]`) tasks. Each task entry MUST state the reason, status, files involved, and exact file changes.
 - **`.agent/tasks/improvment_task.md`**: Log of improvement suggestions, audits, and future scope. Pending items here MUST be cross-logged in `tasks.md`.
+
+## 2. Git Push Permission Rule
+- **NEVER PUSH WITHOUT EXPLICIT PERMISSION**: Agents MUST NOT run `git push` or push code to remote repositories (`origin`, GitHub, GitLab, Bitbucket) without receiving EXPLICIT approval or a direct instruction from the user.
+- Local staging (`git add`) and commits (`git commit`) are permitted, but pushing MUST be requested and approved beforehand.

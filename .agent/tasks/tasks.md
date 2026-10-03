@@ -66,6 +66,13 @@ This file is the **Single Source of Truth (SSOT)** for all accomplished (`[x]`) 
   - `.agent/tasks/tasks.md`: Re-structured as SSOT for accomplished and pending tasks with file change logs.
   - `.agent/tasks/improvment_task.md`: Re-structured for improvement suggestions, audits, and future scope.
 
+### Task 6: Git Push Permission Rule Enforcer
+- **Reason / Situation**: User requested adding a mandatory rule prohibiting agents from executing `git push` without receiving explicit user permission first.
+- **Status**: `[x]` Accomplished
+- **Files Involved & Changes Made**:
+  - `.agents/rules/git_push_permission.md`: Created workspace rule file defining git push permission requirements.
+  - `AGENTS.md`: Updated to mandate explicit user permission before any `git push` command.
+
 ---
 
 ## ⏳ Pending Tasks (`[ ]`)
