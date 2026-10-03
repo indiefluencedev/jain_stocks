@@ -97,39 +97,74 @@ This file is the **Single Source of Truth (SSOT)** for all accomplished (`[x]`) 
   - `src/lib/store.ts`: Updated `seed()` to remove sample transaction log generation (ledger rows, requests, challans, inwards, sample audit logs) and demo user creation. Updated `STORE_KEY` to `ja_stock_mvp_v2` to invalidate legacy browser localStorage caches.
   - `scripts/purge-and-reset-appstate.ts`: Created and executed script to clear relational transaction tables and overwrite `app_state` table (`WHERE key = 'full_store'`) in Neon DB with a clean snapshot containing 20 catalog parts, 8 destinations, 1 Super Admin user, and empty transaction arrays (`ledger: []`, `requests: []`, `challans: []`, `inwards: []`, `audit: []`).
 
+### Task 10: Multi-Page Architecture & Relational PostgreSQL Migration Planning
+- **Reason / Situation**: User requested transitioning the application from a Single-Page App (SPA JSON snapshot) to a Multi-Page Next.js App Router Architecture with pure relational PostgreSQL, B-Tree indexes, and server-side SQL pagination.
+- **Status**: `[x]` Accomplished
+- **Files Involved & Changes Made**:
+  - `docs/07_MULTIPAGE_ARCHITECTURE_MIGRATION_PLAN.md`: Created master specification and phased architecture roadmap for multi-page migration, schema indexing, pagination contracts, and API route specs.
+
 ---
 
-## ⏳ Pending Tasks (`[ ]`)
+## ⏳ Pending Tasks (`[ ]`) - PRIORITIZED
 
-### Pending Task 1: Execute Static Data Migration on Neon DB
+### 🔥 TOP PRIORITY 1: PostgreSQL Schema Hardening & B-Tree Indexes (Phase 1)
+- **Reason / Situation**: Apply DDL migrations for foreign key constraints and B-Tree indexes (`idx_ledger_part_id`, `idx_ledger_ts`, `idx_requests_status`, `idx_requests_requested_by`) in Neon DB to enable high-performance server-side SQL queries.
+- **Status**: `[ ]` Pending (FIRST PRIORITY TO IMPLEMENT)
+- **Files Involved**: `scripts/migrate-schema-indexes.ts`, Neon DB.
+- **Derived From**: `docs/07_MULTIPAGE_ARCHITECTURE_MIGRATION_PLAN.md` (Phase 1)
+
+### 🔥 TOP PRIORITY 2: Server-Side Paginated API Route Handlers (Phase 2)
+- **Reason / Situation**: Create RESTful API route handlers with SQL pagination (`LIMIT`/`OFFSET`), generic search (`ILIKE`), and category/status filtering.
+- **Status**: `[ ]` Pending (FIRST PRIORITY TO IMPLEMENT)
+- **Files Involved**: `src/app/api/inventory/route.ts`, `src/app/api/requests/route.ts`, `src/app/api/ledger/route.ts`, `src/app/api/challans/route.ts`, `src/app/api/inwards/route.ts`, `src/app/api/audit/route.ts`.
+- **Derived From**: `docs/07_MULTIPAGE_ARCHITECTURE_MIGRATION_PLAN.md` (Phase 2)
+
+### 🔥 TOP PRIORITY 3: Next.js App Router Page Layouts & Route Shells (Phase 3)
+- **Reason / Situation**: Scaffold Next.js App Router layout (`src/app/(dashboard)/layout.tsx`) and route folders (`/dashboard`, `/inventory`, `/requests`, `/challans`, `/inwards`, `/ledger`, `/destinations`, `/users`, `/reports`, `/audit`, `/settings`).
+- **Status**: `[ ]` Pending
+- **Files Involved**: `src/app/(dashboard)/**/page.tsx`, `src/middleware.ts`.
+- **Derived From**: `docs/07_MULTIPAGE_ARCHITECTURE_MIGRATION_PLAN.md` (Phase 3)
+
+### 🔥 TOP PRIORITY 4: Server Component Integration & Client Action Handlers (Phase 4)
+- **Reason / Situation**: Replace SPA hash router components with React Server Components (RSC) for initial page load and Client Actions for transaction modals.
+- **Status**: `[ ]` Pending
+- **Files Involved**: View components under `src/app/(dashboard)/`.
+- **Derived From**: `docs/07_MULTIPAGE_ARCHITECTURE_MIGRATION_PLAN.md` (Phase 4)
+
+### 🔥 TOP PRIORITY 5: Complete Retirement of `app_state` & End-to-End Performance Tuning (Phase 5)
+- **Reason / Situation**: Remove legacy `app_state` single-document POST sync and run load testing for sub-100ms response times.
+- **Status**: `[ ]` Pending
+- **Files Involved**: `src/app/api/db/route.ts`, `src/lib/store.ts`.
+- **Derived From**: `docs/07_MULTIPAGE_ARCHITECTURE_MIGRATION_PLAN.md` (Phase 5)
+
+---
+
+### Secondary Pending Tasks
+
+### Pending Task 6: Execute Static Data Migration on Neon DB
 - **Reason / Situation**: Shift hard-coded bike models, adjust reasons, and destination types from code to Neon DB database tables.
 - **Status**: `[ ]` Pending
 - **Files Involved**: `scripts/seed-static-data.ts`, `src/lib/ops.ts`, UI components.
 - **Derived From**: `improvment_task.md` (Next Step 1)
 
-### Pending Task 2: Add API Endpoints `listBikeModels` & `listAdjustReasons`
-- **Reason / Situation**: Fetch dynamic bike models and adjustment reasons from database at runtime instead of hardcoded arrays.
-- **Status**: `[ ]` Pending
-- **Files Involved**: `src/app/api/bikeModels/route.ts`, `src/app/api/adjustReasons/route.ts`, `src/components/Views/InventoryView.tsx`, `src/components/Views/ReturnsView.tsx`.
-- **Derived From**: `improvment_task.md` (Next Step 2)
-
-### Pending Task 3: Clean Up Unused Cryptographic Primitives from `store.ts`
-- **Reason / Situation**: Replace hand‑rolled `hashPw()` and `sha256()` in `src/lib/store.ts` with native `crypto.randomUUID()` and Web Crypto APIs.
+### Pending Task 7: Clean Up Unused Cryptographic Primitives from `store.ts`
+- **Reason / Situation**: Replace hand-rolled `hashPw()` and `sha256()` in `src/lib/store.ts` with native `crypto.randomUUID()` and Web Crypto APIs.
 - **Status**: `[ ]` Pending
 - **Files Involved**: `src/lib/store.ts`.
 - **Derived From**: `improvment_task.md` (Next Step 3)
 
-### Pending Task 4: Remove Unused Dead Files Identified in Ponytail Audit
+### Pending Task 8: Remove Unused Dead Files Identified in Ponytail Audit
 - **Reason / Situation**: Delete dead files (`jain-stock-mvp_1.html`, `scripts/seed-users.ts`, `scripts/seed-full-db.ts`, `src/lib/auth-rbac.ts`, `src/lib/auth-client.ts`, `middleware.ts`, `neon.ts`).
 - **Status**: `[ ]` Pending
 - **Files Involved**: Dead files listed in `docs/audit_ponytail.md`.
 - **Derived From**: `improvment_task.md` (Audit findings)
 
-### Pending Task 5: Add RBAC Permission Tests
+### Pending Task 9: Add RBAC Permission Tests
 - **Reason / Situation**: Ensure each role respects its permission set; currently no automated tests.
 - **Status**: `[ ]` Pending
 - **Files Involved**: New test file `tests/rbac.test.ts` referencing `src/lib/ops.ts` and `src/lib/constants.ts`.
 - **Derived From**: General quality assurance.
+
 
 
 
