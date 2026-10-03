@@ -1,0 +1,124 @@
+'use client';
+
+import React from 'react';
+import { useApp } from '@/context/AppContext';
+import { ROLES } from '@/lib/constants';
+import { initials } from '@/lib/store';
+import {
+  LayoutGrid,
+  Box,
+  ArrowDownCircle,
+  FileCheck,
+  FileText,
+  RotateCcw,
+  Bike,
+  List,
+  BarChart3,
+  Users,
+  Shield,
+  Settings,
+  LogOut,
+} from 'lucide-react';
+import { Permission } from '@/types';
+
+interface NavItem {
+  key: string;
+  label: string;
+  shortLabel?: string;
+  icon: React.ReactNode;
+  group: 'Overview' | 'Operations' | 'Traceability' | 'Admin';
+  perm?: Permission;
+  any?: Permission[];
+}
+
+export const Sidebar: React.FC = () => {
+  const { db, user, activeRoute, setRoute, logout, openCount, can } = useApp();
+
+  if (!user) return null;
+
+  const NAV_ITEMS: NavItem[] = [
+    { key: 'dashboard', label: 'Dashboard', icon: <LayoutGrid size={20} />, group: 'Overview' },
+    { key: 'inventory', label: 'Inventory', icon: <Box size={20} />, group: 'Overview' },
+    { key: 'stockin', label: 'Stock In', icon: <ArrowDownCircle size={20} />, group: 'Operations', perm: 'stock_in' },
+    { key: 'requests', label: 'Requests & Issue', shortLabel: 'Requests', icon: <FileCheck size={20} />, group: 'Operations', any: ['request_create', 'request_approve', 'issue'] },
+    { key: 'challans', label: 'Delivery Challans', shortLabel: 'Challans', icon: <FileText size={20} />, group: 'Operations', any: ['issue', 'reports', 'request_approve'] },
+    { key: 'returns', label: 'Returns & Adjustments', shortLabel: 'Returns', icon: <RotateCcw size={20} />, group: 'Operations', any: ['return', 'adjust'] },
+    { key: 'destinations', label: 'Destinations & Bikes', shortLabel: 'Bikes', icon: <Bike size={20} />, group: 'Traceability' },
+    { key: 'ledger', label: 'Stock Ledger', shortLabel: 'Ledger', icon: <List size={20} />, group: 'Traceability', perm: 'reports' },
+    { key: 'reports', label: 'Reports', icon: <BarChart3 size={20} />, group: 'Traceability', perm: 'reports' },
+    { key: 'users', label: 'Users', icon: <Users size={20} />, group: 'Admin', perm: 'users_manage' },
+    { key: 'audit', label: 'Audit Log', shortLabel: 'Audit', icon: <Shield size={20} />, group: 'Admin', perm: 'audit_view' },
+    { key: 'settings', label: 'Settings & Data', shortLabel: 'Settings', icon: <Settings size={20} />, group: 'Admin', perm: 'settings' },
+  ];
+
+  const isAllowed = (item: NavItem) => {
+    if (item.perm && !can(item.perm)) return false;
+    if (item.any && !item.any.some((p) => can(p))) return false;
+    return true;
+  };
+
+  const allowedItems = NAV_ITEMS.filter(isAllowed);
+
+  let currentGroup = '';
+  const renderedItems: React.ReactNode[] = [];
+
+  allowedItems.forEach((item) => {
+    if (item.group !== currentGroup) {
+      currentGroup = item.group;
+      renderedItems.push(
+        <div key={`group-${currentGroup}`} className="nav-label">
+          {currentGroup}
+        </div>
+      );
+    }
+
+    const oc = item.key === 'requests' ? openCount() : 0;
+    const isActive = activeRoute === item.key;
+
+    renderedItems.push(
+      <button
+        key={item.key}
+        className={isActive ? 'on' : ''}
+        onClick={() => setRoute(item.key)}
+        title={item.label}
+      >
+        {item.icon}
+        <span className="lbl">{item.shortLabel || item.label}</span>
+        {oc > 0 && <span className="count">{oc}</span>}
+      </button>
+    );
+  });
+
+  return (
+    <aside className="sidebar">
+      <div className="brand">
+        <div className="brand-mark">JA</div>
+        <div className="brand-text">
+          <div className="brand-name">JAIN AUTOMOBILES</div>
+          <div className="brand-sub">GMA &amp; Parts Stock · {db.settings.branch}</div>
+        </div>
+      </div>
+
+      <nav className="nav">{renderedItems}</nav>
+
+      <div className="me" onClick={() => setRoute('users')} title="Account">
+        <div className="avatar">{initials(user.name)}</div>
+        <div className="me-info">
+          <div className="n">{user.name}</div>
+          <div className="r">{ROLES[user.role]?.label}</div>
+        </div>
+        <button
+          className="icon-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            logout();
+          }}
+          title="Sign out"
+          aria-label="Sign out"
+        >
+          <LogOut size={18} />
+        </button>
+      </div>
+    </aside>
+  );
+};

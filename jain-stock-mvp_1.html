@@ -1,0 +1,1265 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e10">
+<title>Jain Automobiles · Stock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<!--
+============================================================================
+ JAIN AUTOMOBILES · GMA & PARTS STOCK · MVP (single file)
+============================================================================
+ PURPOSE
+   A working prototype that shows exactly what the stock system must do.
+   It is NOT the production build. All data lives in this browser
+   (localStorage), so each device has its own copy. Use Settings > Data
+   to back up, restore, or export every tab as Google Sheets ready CSV.
+
+ HANDOVER NOTES FOR DEVELOPERS
+   1. Layers are separated on purpose:
+        UI (render functions)  ->  API.call(action, ...)  ->  OPS (business rules)  ->  DB
+      Replace DB + mutate() with a real backend (Apps Script / Supabase /
+      Postgres / MongoDB). Keep the OPS action names and payload shapes as
+      the API contract.
+   2. The LEDGER is the source of truth. Stock = sum of ledger qty per part.
+      Rows are append-only. Corrections are REVERSAL or ADJUST rows.
+   3. Destinations (display walls, display bikes, offsite, customer vehicles)
+      are not warehouses. Their "holding" = -(sum of ledger qty with that
+      destinationId).
+   4. Every mutating action: session check -> permission check -> validate ->
+      write ledger -> write audit -> save. In production this must run
+      server-side inside one DB transaction with a row lock per part.
+   5. Passwords: salted SHA-256, 300 rounds, done in the browser. Production
+      must use bcrypt/argon2 on the server. Never trust this client.
+============================================================================
+-->
+<style>
+:root{
+  --bg:#0e0e10;--bg-2:#131316;--surface:#18181c;--surface-2:#1f1f24;--surface-3:#27272d;
+  --line:#2b2b32;--line-2:#3a3a43;--text:#eeece6;--text-2:#bdb9ae;--muted:#8d8980;
+  --gold:#c9a24b;--gold-2:#e5c77f;--gold-dim:rgba(201,162,75,.14);--gold-line:rgba(201,162,75,.35);
+  --red:#e3695d;--red-dim:rgba(227,105,93,.14);--amber:#e3a63f;--amber-dim:rgba(227,166,63,.14);
+  --green:#58b983;--green-dim:rgba(88,185,131,.14);--blue:#7aaade;--blue-dim:rgba(122,170,222,.14);
+  --radius:14px;--radius-sm:9px;--sidebar:248px;--topbar:64px;
+  --f-display:'Rajdhani','Arial Narrow',system-ui,sans-serif;
+  --f-body:'DM Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:var(--f-body);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--gold-2);text-decoration:none}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;letter-spacing:.02em;margin:0}
+.ic{flex:none;display:block}
+.muted{color:var(--muted)}.strong{font-weight:600}.sub{font-size:12px;color:var(--muted)}
+.code{font-family:var(--f-display);font-weight:600;font-size:15px;letter-spacing:.04em;color:var(--gold-2)}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.hidden{display:none!important}
+::selection{background:var(--gold);color:#111}
+
+/* ---------- Buttons & inputs ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 16px;border-radius:var(--radius-sm);border:1px solid var(--line-2);background:var(--surface-2);cursor:pointer;font-weight:600;white-space:nowrap;transition:background .15s,border-color .15s,transform .05s}
+.btn:hover{background:var(--surface-3);border-color:var(--muted)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:linear-gradient(180deg,var(--gold-2),var(--gold));border-color:var(--gold);color:#17130a}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.ghost{background:transparent}
+.btn.danger{background:var(--red-dim);border-color:rgba(227,105,93,.45);color:#ffb4ab}
+.btn.sm{height:34px;padding:0 12px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.icon-btn{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:var(--radius-sm);border:1px solid transparent;background:transparent;color:var(--text-2);cursor:pointer}
+.icon-btn:hover{background:var(--surface-2);border-color:var(--line)}
+input,select,textarea{width:100%;height:42px;padding:0 12px;background:var(--bg-2);border:1px solid var(--line-2);border-radius:var(--radius-sm);outline:none;transition:border-color .15s,box-shadow .15s}
+textarea{height:auto;padding:10px 12px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 17px) 18px,calc(100% - 12px) 18px;background-size:5px 5px;background-repeat:no-repeat;padding-right:32px}
+input[type=checkbox]{width:18px;height:18px;accent-color:var(--gold)}
+input[type=date]{color-scheme:dark}
+.field{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:var(--text-2);letter-spacing:.02em}
+.field .req{color:var(--gold)}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 16px}
+.form-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.span-2{grid-column:span 2}.span-3{grid-column:1/-1}
+.check{display:flex;align-items:center;gap:10px;font-weight:500;color:var(--text);cursor:pointer;padding:10px 0}
+.hint{color:var(--muted);font-size:13px;margin:4px 0 14px}
+.form-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;flex-wrap:wrap}
+
+/* ---------- Badges ---------- */
+.badge{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:99px;font-size:12px;font-weight:600;white-space:nowrap;border:1px solid transparent}
+.badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.badge.green{color:var(--green);background:var(--green-dim)}
+.badge.red{color:var(--red);background:var(--red-dim)}
+.badge.amber{color:var(--amber);background:var(--amber-dim)}
+.badge.blue{color:var(--blue);background:var(--blue-dim)}
+.badge.gold{color:var(--gold-2);background:var(--gold-dim)}
+.badge.muted{color:var(--muted);background:var(--surface-3)}
+.chip{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:var(--surface-3);font-size:12px;color:var(--text-2);white-space:nowrap}
+
+/* ---------- Login ---------- */
+.login{min-height:100vh;display:grid;grid-template-columns:1.1fr 1fr}
+.login-art{position:relative;overflow:hidden;padding:56px;display:flex;flex-direction:column;justify-content:space-between;background:
+  radial-gradient(1200px 600px at -10% 110%,rgba(201,162,75,.18),transparent 60%),
+  repeating-linear-gradient(115deg,transparent 0 22px,rgba(201,162,75,.045) 22px 23px),
+  linear-gradient(160deg,#141417,#0b0b0d);border-right:1px solid var(--line)}
+.login-art h2{font-size:clamp(34px,4.2vw,58px);line-height:1;max-width:12ch;color:var(--text)}
+.login-art h2 em{font-style:normal;color:var(--gold-2)}
+.login-art p{color:var(--text-2);max-width:44ch;font-size:15px}
+.login-points{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:560px}
+.login-points div{border-top:1px solid var(--gold-line);padding-top:10px;font-size:13px;color:var(--text-2)}
+.login-points b{display:block;font-family:var(--f-display);font-size:22px;color:var(--gold-2)}
+.login-side{display:grid;place-items:center;padding:32px 20px}
+.login-card{width:100%;max-width:380px}
+.login-card h1{font-size:34px;margin:28px 0 4px}
+.login-card .field{margin-top:16px}
+.login-card .btn{width:100%;margin-top:22px;height:48px;font-size:15px}
+.login-err{margin-top:14px;padding:10px 12px;border-radius:var(--radius-sm);background:var(--red-dim);color:#ffb4ab;font-size:13px}
+.login-note{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.pw-wrap{position:relative}.pw-wrap input{padding-right:64px}
+.pw-wrap button{position:absolute;right:6px;top:6px;height:30px;padding:0 10px;border:0;border-radius:6px;background:var(--surface-3);font-size:12px;cursor:pointer;color:var(--text-2)}
+
+/* ---------- Brand ---------- */
+.brand{display:flex;align-items:center;gap:12px;padding:4px 8px}
+.brand-mark{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(145deg,#2a2419,#16130c);border:1px solid var(--gold-line);font-family:var(--f-display);font-weight:700;font-size:18px;color:var(--gold-2);letter-spacing:.04em;flex:none}
+.brand-name{font-family:var(--f-display);font-weight:700;font-size:17px;letter-spacing:.08em;line-height:1.05}
+.brand-sub{font-size:11px;color:var(--muted);letter-spacing:.04em}
+
+/* ---------- Shell ---------- */
+.shell{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr);min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--bg-2);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:18px 12px 14px}
+.nav{margin-top:22px;display:flex;flex-direction:column;gap:2px;flex:1}
+.nav-label{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:14px 12px 6px}
+.nav a{display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:10px;color:var(--text-2);font-weight:500;position:relative}
+.nav a:hover{background:var(--surface);color:var(--text)}
+.nav a.on{background:var(--gold-dim);color:var(--gold-2)}
+.nav a.on::before{content:"";position:absolute;left:-12px;top:9px;bottom:9px;width:3px;border-radius:0 3px 3px 0;background:var(--gold)}
+.nav a .count{margin-left:auto;min-width:22px;height:20px;padding:0 6px;border-radius:99px;background:var(--gold);color:#17130a;font-size:11px;font-weight:700;display:grid;place-items:center}
+.me{display:flex;align-items:center;gap:10px;padding:12px 8px 4px;border-top:1px solid var(--line);margin-top:10px}
+.avatar{width:36px;height:36px;border-radius:50%;background:var(--surface-3);border:1px solid var(--gold-line);display:grid;place-items:center;font-family:var(--f-display);font-weight:700;color:var(--gold-2);flex:none}
+.me-info{min-width:0;flex:1}.me-info .n{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.me-info .r{font-size:11.5px;color:var(--muted)}
+.main{min-width:0;display:flex;flex-direction:column}
+.topbar{height:var(--topbar);position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:14px;padding:0 28px;background:rgba(14,14,16,.86);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.topbar h1{font-size:22px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar .mob-brand{display:none}
+.live{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--text-2);padding:0 10px;height:30px;border-radius:99px;border:1px solid var(--line)}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(88,185,131,.6);animation:pulse 2.2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(88,185,131,.5)}70%{box-shadow:0 0 0 8px rgba(88,185,131,0)}100%{box-shadow:0 0 0 0 rgba(88,185,131,0)}}
+.view{padding:26px 28px 48px;width:100%;max-width:1480px;margin:0 auto}
+.bottomnav{display:none}
+.mvp-flag{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold-2);border:1px dashed var(--gold-line);border-radius:6px;padding:3px 8px;white-space:nowrap}
+
+/* ---------- Panels, grids ---------- */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px}
+.panel h2{font-size:19px;margin-bottom:4px}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.panel-head h2{margin:0}
+.grid{display:grid;gap:18px}
+.g-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g-main{grid-template-columns:minmax(0,1.65fr) minmax(0,1fr)}
+.stack{display:flex;flex-direction:column;gap:18px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:14px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;position:relative;overflow:hidden}
+.stat .l{font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;font-weight:600}
+.stat .v{font-family:var(--f-display);font-weight:700;font-size:34px;line-height:1.1;margin-top:6px}
+.stat .s{font-size:12.5px;color:var(--text-2)}
+.stat.gold .v{color:var(--gold-2)}.stat.red .v{color:var(--red)}.stat.amber .v{color:var(--amber)}
+.stat.gold{border-color:var(--gold-line);background:linear-gradient(160deg,rgba(201,162,75,.10),var(--surface) 60%)}
+.greet{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.greet h2{font-size:30px}.greet p{margin:2px 0 0;color:var(--muted)}
+.quick{display:flex;gap:10px;flex-wrap:wrap}
+
+/* ---------- Toolbar ---------- */
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.search{position:relative;flex:1;min-width:220px}
+.search .ic{position:absolute;left:12px;top:12px;color:var(--muted)}
+.search input{padding-left:40px}
+.toolbar select,.toolbar input[type=date]{width:auto;min-width:150px}
+.tabs{display:flex;gap:4px;background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:4px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{height:34px;padding:0 14px;border-radius:9px;border:0;background:transparent;color:var(--text-2);font-weight:600;cursor:pointer;white-space:nowrap}
+.tabs button.on{background:var(--surface-3);color:var(--gold-2)}
+.tabs button .n{margin-left:6px;color:var(--muted);font-weight:500}
+
+/* ---------- Tables ---------- */
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+table.t{width:100%;border-collapse:collapse;min-width:680px}
+.t th{text-align:left;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:12px 14px;background:var(--surface-2);border-bottom:1px solid var(--line);white-space:nowrap}
+.t td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+.t tbody tr:last-child td{border-bottom:0}
+.t tr.click{cursor:pointer}.t tr.click:hover td{background:rgba(255,255,255,.018)}
+.t th.num,.t td.num{text-align:right}
+.t td.actions{text-align:right;white-space:nowrap}
+.t .qty{font-family:var(--f-display);font-weight:700;font-size:20px;line-height:1}
+.bar{height:5px;border-radius:9px;background:var(--surface-3);overflow:hidden;margin:6px 0 4px;min-width:90px}
+.bar i{display:block;height:100%;border-radius:9px;background:var(--green)}
+.bar i.low{background:var(--amber)}.bar i.out{background:var(--red)}.bar i.over{background:var(--blue)}
+.qpos{color:var(--green);font-weight:700}.qneg{color:var(--red);font-weight:700}
+.empty{padding:36px 18px;text-align:center;color:var(--muted);border:1px dashed var(--line-2);border-radius:var(--radius)}
+.strike{text-decoration:line-through;opacity:.55}
+
+/* ---------- Lists ---------- */
+.alert-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.alert-row:last-child{border-bottom:0}
+.alert-row .grow{flex:1;min-width:0}
+.alert-row .grow .t1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feed{display:flex;flex-direction:column}
+.feed-item{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.feed-item:last-child{border-bottom:0}
+.feed-dot{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none}
+.feed-dot.green{background:var(--green-dim);color:var(--green)}.feed-dot.gold{background:var(--gold-dim);color:var(--gold-2)}
+.feed-dot.blue{background:var(--blue-dim);color:var(--blue)}.feed-dot.amber{background:var(--amber-dim);color:var(--amber)}.feed-dot.red{background:var(--red-dim);color:var(--red)}
+.feed-item .t1{font-size:13.5px}.feed-item .t2{font-size:12px;color:var(--muted)}
+.cat-row{display:grid;grid-template-columns:130px 1fr 60px;gap:12px;align-items:center;padding:7px 0;font-size:13px}
+.cat-row .track{height:10px;border-radius:9px;background:var(--surface-3);overflow:hidden}
+.cat-row .track i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-2));border-radius:9px}
+.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px 18px}
+.kv div{min-width:0}.kv .k{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.kv .v{font-weight:600;overflow-wrap:anywhere}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;cursor:pointer;transition:border-color .15s,transform .15s;display:flex;flex-direction:column;gap:8px}
+.card:hover{border-color:var(--gold-line);transform:translateY(-1px)}
+.card h3{font-size:18px}.card p{margin:0;color:var(--muted);font-size:13px;flex:1}
+.card .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px}
+.big-num{font-family:var(--f-display);font-weight:700;font-size:28px;color:var(--gold-2);line-height:1}
+.timeline{border-left:2px solid var(--line-2);margin-left:6px;padding-left:16px}
+.timeline div{position:relative;padding:4px 0 10px;font-size:13px}
+.timeline div::before{content:"";position:absolute;left:-22px;top:9px;width:10px;height:10px;border-radius:50%;background:var(--gold);border:2px solid var(--surface)}
+.timeline span{color:var(--muted);font-size:12px}
+.note{background:var(--gold-dim);border:1px solid var(--gold-line);color:var(--text);padding:12px 14px;border-radius:var(--radius-sm);font-size:13px}
+.note.red{background:var(--red-dim);border-color:rgba(227,105,93,.4)}
+.section-title{font-family:var(--f-display);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:22px 0 10px}
+
+/* ---------- Lines editor ---------- */
+.lines{display:flex;flex-direction:column;gap:10px;margin:18px 0 6px}
+.lines-head{display:grid;grid-template-columns:1fr 110px 38px;gap:10px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.line{display:grid;grid-template-columns:1fr 110px 38px;gap:10px;align-items:start;padding:10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg-2)}
+.line .ln-info{font-size:12px;margin-top:6px;min-height:16px}
+.line .ln-info b{color:var(--gold-2)}
+.lines>.btn{align-self:flex-start}
+
+/* ---------- Modal ---------- */
+.overlay{position:fixed;inset:0;z-index:100;background:rgba(5,5,6,.7);backdrop-filter:blur(3px);display:grid;place-items:center;padding:24px;animation:fade .15s}
+@keyframes fade{from{opacity:0}}
+.modal{width:100%;max-width:760px;max-height:calc(100vh - 48px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line-2);border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.55);animation:rise .18s ease-out}
+.modal.wide{max-width:1000px}.modal.narrow{max-width:460px}
+@keyframes rise{from{transform:translateY(10px);opacity:0}}
+.modal-head{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.modal-head h2{font-size:22px;flex:1}
+.modal-body{padding:20px;overflow-y:auto;flex:1}
+.modal-foot{display:flex;gap:10px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--line);flex-wrap:wrap}
+
+/* ---------- Toasts ---------- */
+#toasts{position:fixed;right:20px;bottom:20px;z-index:200;display:flex;flex-direction:column;gap:10px;pointer-events:none}
+.toast{min-width:260px;max-width:380px;padding:12px 16px;border-radius:12px;background:var(--surface-3);border:1px solid var(--line-2);box-shadow:0 12px 30px rgba(0,0,0,.4);font-size:13.5px;animation:rise .2s;pointer-events:auto}
+.toast.ok{border-color:rgba(88,185,131,.5)}.toast.error{border-color:rgba(227,105,93,.6);background:#2a1917}
+
+/* ---------- Paper (challan) ---------- */
+.paper{background:#fff;color:#141414;border-radius:8px;padding:28px;font-size:12.5px;font-family:var(--f-body)}
+.paper .p-head{display:flex;justify-content:space-between;gap:16px;border-bottom:2px solid #141414;padding-bottom:12px}
+.paper .p-brand{font-family:var(--f-display);font-size:24px;font-weight:700;letter-spacing:.06em}
+.paper .p-sub{font-size:11px;color:#555}
+.paper .p-title{text-align:right;font-family:var(--f-display);font-weight:700;font-size:18px;letter-spacing:.08em}
+.paper .p-title span{display:block;font-size:11px;font-weight:500;color:#555;letter-spacing:.04em}
+.paper .p-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 16px;margin:16px 0}
+.paper .p-meta .k{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#666}
+.paper .p-meta .v{font-weight:700;overflow-wrap:anywhere}
+.paper table{width:100%;border-collapse:collapse;margin-top:6px}
+.paper th,.paper td{border:1px solid #bbb;padding:7px 9px;text-align:left}
+.paper th{background:#f1ede3;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+.paper .r{text-align:right}
+.paper tfoot td{font-weight:700}
+.paper .p-sign{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:44px}
+.paper .p-sign div{border-top:1px solid #141414;padding-top:6px;font-size:11px;color:#444}
+.paper .p-foot{margin-top:22px;font-size:10px;color:#888;text-align:center}
+#print-root{display:none}
+@media print{
+  body{background:#fff}
+  #app,#modal-root,#toasts{display:none!important}
+  #print-root{display:block!important}
+  #print-root .paper{border-radius:0;padding:0}
+  @page{margin:14mm}
+}
+
+/* ==========================================================
+   RESPONSIVE
+   Desktop  >= 1100px : full sidebar
+   iPad 10" portrait / Fold 8 Ultra inner (700-1099) : icon rail
+   Fold 8 Ultra inner is near-square (about 11:10): 2-column layouts kept
+   Phone / Fold cover (< 700) : bottom tab bar, cards instead of tables
+   ========================================================== */
+@media (max-width:1320px){ .g-main{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)} }
+@media (max-width:1099px){
+  :root{--sidebar:88px}
+  .sidebar{padding:16px 8px;align-items:stretch}
+  .brand{justify-content:center;padding:0}
+  .brand-text,.nav-label,.me-info,.me .icon-btn{display:none}
+  .nav{margin-top:18px;gap:4px}
+  .nav a{flex-direction:column;justify-content:center;gap:4px;height:58px;padding:0 4px;font-size:10.5px;text-align:center;line-height:1.1}
+  .nav a .lbl{max-width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .nav a .count{position:absolute;top:4px;right:6px;min-width:18px;height:16px;font-size:10px}
+  .nav a.on::before{left:-8px}
+  .me{justify-content:center;padding:12px 0 0;cursor:pointer}
+  .topbar,.view{padding-left:22px;padding-right:22px}
+  .g-main,.g-3{grid-template-columns:minmax(0,1fr)}
+  .form-grid.three{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+/* Near-square foldable inner screen (Galaxy Z Fold 8 Ultra unfolded) */
+@media (min-width:700px) and (max-width:1099px) and (min-aspect-ratio:8/10) and (max-aspect-ratio:13/10){
+  .g-main{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}
+  .stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .stat .v{font-size:30px}
+}
+@media (max-width:699px){
+  html,body{font-size:15px}
+  input,select,textarea{font-size:16px;height:46px}
+  .btn{height:44px}
+  .shell{display:block}
+  .sidebar{display:none}
+  .topbar{height:56px;padding:0 14px;gap:10px}
+  .topbar h1{font-size:19px}
+  .topbar .mob-brand{display:grid}
+  .topbar .mob-brand .brand-mark{width:34px;height:34px;font-size:15px;border-radius:9px}
+  .live span{display:none}.live{padding:0 9px}
+  .mvp-flag{display:none}
+  .view{padding:16px 14px calc(96px + var(--safe-b))}
+  .bottomnav{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(19,19,22,.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:6px 4px calc(6px + var(--safe-b))}
+  .bottomnav a,.bottomnav button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;font-size:11px;color:var(--muted);background:none;border:0;cursor:pointer;position:relative}
+  .bottomnav .on{color:var(--gold-2)}
+  .bottomnav .count{position:absolute;top:0;left:55%;min-width:17px;height:17px;border-radius:99px;background:var(--gold);color:#17130a;font-size:10px;font-weight:700;display:grid;place-items:center;padding:0 4px}
+  .form-grid,.form-grid.three{grid-template-columns:minmax(0,1fr)}
+  .span-2{grid-column:auto}
+  .g-2,.g-3,.g-main{grid-template-columns:minmax(0,1fr)}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .stat{padding:13px 14px}.stat .v{font-size:26px}.stat .l{font-size:10.5px}
+  .greet h2{font-size:24px}
+  .panel{padding:16px}
+  .toolbar select,.toolbar input[type=date]{flex:1;min-width:0}
+  .search{min-width:100%}
+  .toolbar>.btn{flex:1}
+  .alert-row .badge{display:none}
+  .cat-row{grid-template-columns:96px 1fr 44px}
+  .line{grid-template-columns:1fr 84px 38px;padding:8px}
+  .lines-head{grid-template-columns:1fr 84px 38px}
+  /* tables become cards */
+  table.t.tcards{min-width:0}
+  .t.tcards thead{display:none}
+  .t.tcards tr{display:block;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .t.tcards tbody tr:last-child{border-bottom:0}
+  .t.tcards td{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:4px 0;border:0;text-align:right;min-height:28px}
+  .t.tcards td::before{content:attr(data-label);color:var(--muted);font-size:12.5px;text-align:left;flex:none}
+  .t.tcards td.lead{display:block;text-align:left;padding-bottom:6px}
+  .t.tcards td.lead::before,.t.tcards td[data-label=""]::before{display:none}
+  .t.tcards td.actions{justify-content:flex-end;padding-top:8px}
+  .t.tcards .bar{min-width:70px;width:90px;margin-left:auto}
+  .overlay{padding:0;place-items:end stretch}
+  .modal,.modal.wide,.modal.narrow{max-width:none;max-height:94vh;border-radius:18px 18px 0 0;border-bottom:0}
+  .modal-body{padding:16px}
+  .modal-foot{padding:12px 16px calc(12px + var(--safe-b))}
+  .modal-foot .btn{flex:1}
+  .paper{padding:16px}.paper .p-meta{grid-template-columns:repeat(2,1fr)}
+  .paper .p-head{flex-direction:column}.paper .p-title{text-align:left}
+  #toasts{left:12px;right:12px;bottom:calc(84px + var(--safe-b))}
+  .toast{max-width:none}
+  .login{grid-template-columns:1fr}
+  .login-art{padding:28px 22px 24px;min-height:auto;border-right:0;border-bottom:1px solid var(--line)}
+  .login-art h2{font-size:30px}
+  .login-art p,.login-points{display:none}
+  .login-side{place-items:start center;padding:10px 22px 40px}
+  .login-card h1{margin-top:14px}
+}
+/* Very tall, narrow screens (Fold 8 Ultra cover, 21:9) */
+@media (max-width:699px) and (max-aspect-ratio:1/2){
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .view{padding-left:12px;padding-right:12px}
+}
+@media (max-width:380px){ .stats{grid-template-columns:minmax(0,1fr) minmax(0,1fr)} .stat .v{font-size:23px} }
+@media (min-width:700px) and (max-width:1099px){ .login{grid-template-columns:1fr} .login-art{min-height:auto;padding:40px} .login-points{display:none} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal-root"></div>
+<div id="toasts" aria-live="polite"></div>
+<div id="print-root"></div>
+
+<script>
+'use strict';
+/* =========================================================================
+   0. SMALL HELPERS
+   ========================================================================= */
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const DAY=86400000;
+let CLOCK=null; const now=()=>CLOCK||Date.now();
+function randHex(n){const a=new Uint8Array(n);try{crypto.getRandomValues(a)}catch(e){for(let i=0;i<n;i++)a[i]=Math.random()*256|0}return Array.from(a,b=>b.toString(16).padStart(2,'0')).join('')}
+const uid=p=>p+'_'+Date.now().toString(36)+randHex(4);
+const fmtN=n=>Number(n||0).toLocaleString('en-IN');
+const fmtINR=n=>'₹'+Math.round(Number(n||0)).toLocaleString('en-IN');
+const fmtD=ts=>ts?new Date(ts).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'-';
+const fmtDT=ts=>ts?new Date(ts).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'-';
+const isoDate=ts=>{const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const startOfDay=ts=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime()};
+function ago(ts){const s=(Date.now()-ts)/1000;if(s<60)return'just now';if(s<3600)return Math.floor(s/60)+' min ago';if(s<86400)return Math.floor(s/3600)+' h ago';const d=Math.floor(s/86400);return d===1?'yesterday':d+' days ago'}
+const sum=(a,k)=>a.reduce((t,x)=>t+(+x[k]||0),0);
+const initials=n=>String(n||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+
+/* Pure-JS SHA-256 (works on file:// and every browser) */
+function sha256(str){
+  const ascii=unescape(encodeURIComponent(str));
+  const rr=(v,a)=>(v>>>a)|(v<<(32-a));const maxWord=Math.pow(2,32);let result='';
+  const words=[];const bitLen=ascii.length*8;
+  let hash=sha256.h=sha256.h||[];const k=sha256.k=sha256.k||[];let pc=k.length;const isC={};
+  for(let c=2;pc<64;c++){if(!isC[c]){for(let i=0;i<313;i+=c)isC[i]=c;hash[pc]=(Math.pow(c,.5)*maxWord)|0;k[pc++]=(Math.pow(c,1/3)*maxWord)|0}}
+  let s=ascii+'\x80';while(s.length%64-56)s+='\x00';
+  for(let i=0;i<s.length;i++){const j=s.charCodeAt(i);words[i>>2]|=j<<((3-i)%4)*8}
+  words[words.length]=((bitLen/maxWord)|0);words[words.length]=bitLen;
+  for(let j=0;j<words.length;){const w=words.slice(j,j+=16);const old=hash;hash=hash.slice(0,8);
+    for(let i=0;i<64;i++){const w15=w[i-15],w2=w[i-2];const a=hash[0],e=hash[4];
+      const t1=hash[7]+(rr(e,6)^rr(e,11)^rr(e,25))+((e&hash[5])^((~e)&hash[6]))+k[i]+(w[i]=(i<16)?w[i]:(w[i-16]+(rr(w15,7)^rr(w15,18)^(w15>>>3))+w[i-7]+(rr(w2,17)^rr(w2,19)^(w2>>>10)))|0);
+      const t2=(rr(a,2)^rr(a,13)^rr(a,22))+((a&hash[1])^(a&hash[2])^(hash[1]&hash[2]));
+      hash=[(t1+t2)|0].concat(hash);hash[4]=(hash[4]+t1)|0}
+    for(let i=0;i<8;i++)hash[i]=(hash[i]+old[i])|0}
+  for(let i=0;i<8;i++)for(let j=3;j+1;j--){const b=(hash[i]>>(j*8))&255;result+=((b<16)?0:'')+b.toString(16)}
+  return result;
+}
+function hashPw(pw,salt){let h=salt+'|'+pw;for(let i=0;i<300;i++)h=sha256(h+salt);return h}
+
+/* =========================================================================
+   1. REFERENCE DATA: roles, permissions, types
+   ========================================================================= */
+const PERMS={
+  view:'View live stock and catalogue',see_value:'See stock value and prices',
+  request_create:'Raise stock requests',request_approve:'Approve or reject requests',
+  issue:'Issue stock and create challans',stock_in:'Enter stock received',
+  return:'Process returns',adjust:'Make stock adjustments',reverse:'Reverse ledger entries',
+  parts_edit:'Add and edit parts',parts_deactivate:'Deactivate parts',
+  destinations_edit:'Manage destinations',reports:'View reports and ledger',export:'Export CSV',
+  users_manage:'Manage users',audit_view:'View audit log',settings:'System settings and data'
+};
+const ROLES={
+  super_admin:{label:'Super Admin',perms:'*',desc:'Highest system authority'},
+  owner:{label:'Owner',perms:'*',desc:'Highest business authority'},
+  sales_manager:{label:'Sales Manager',perms:['view','see_value','request_create','request_approve','reports','export']},
+  service_manager:{label:'Service Manager',perms:['view','see_value','request_create','request_approve','reports','export']},
+  warehouse_manager:{label:'Warehouse Manager',perms:['view','see_value','request_create','request_approve','issue','stock_in','return','adjust','parts_edit','destinations_edit','reports','export']},
+  stock_in:{label:'Stock-In Person',perms:['view','stock_in','parts_edit']},
+  storekeeper:{label:'Storekeeper',perms:['view','request_create','issue','return']},
+  sales_rep:{label:'Sales Representative',perms:['view','request_create']},
+  viewer:{label:'Viewer',perms:['view','reports']}
+};
+const MODELS=['Universal','Classic 350','Bullet 350','Hunter 350','Meteor 350','Goan Classic 350','Himalayan 450','Guerrilla 450','Scram 440','Interceptor 650','Continental GT 650','Super Meteor 650','Shotgun 650','Bear 650'];
+const DEST_TYPES={customer_vehicle:'Customer vehicle',counter_sale:'Counter sale',display:'Display',department:'Internal department',offsite:'Offsite storage'};
+const MV={OPENING:['Opening','blue','box'],IN:['Stock in','green','in'],ISSUE:['Issue','gold','out'],RETURN:['Return','blue','undo'],ADJUST:['Adjustment','amber','edit'],REVERSAL:['Reversal','red','undo']};
+const REQ_B={Requested:'amber',Approved:'blue','Partially issued':'gold',Issued:'green','Closed short':'green',Rejected:'red',Cancelled:'muted'};
+const STATUS_L={out:['Out of stock','red'],low:['Low stock','amber'],over:['Overstocked','blue'],ok:['In stock','green']};
+const ADJ_REASONS=['Physical count correction','Damaged in store','Missing / lost','Found in store','Other'];
+
+/* =========================================================================
+   2. DATA LAYER (localStorage). Swap this block for a real backend later.
+   ========================================================================= */
+const STORE_KEY='ja_stock_mvp_v1',SESSION_KEY='ja_stock_session';
+let DB=null,STORAGE_OK=true,_bal=null,_hold=null;
+function baseDB(){return{version:1,createdAt:Date.now(),
+  settings:{dealership:'Jain Automobiles',branch:'Hisar',dealerCode:'11614',approvalRequired:false,allowNegative:false,sessionHours:10},
+  users:[],parts:[],destinations:[],ledger:[],requests:[],challans:[],inwards:[],audit:[],counters:{},loginGuard:{}}}
+function readStore(){try{const t=localStorage.getItem(STORE_KEY);return t?JSON.parse(t):null}catch(e){STORAGE_OK=false;return null}}
+function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(DB))}catch(e){STORAGE_OK=false}}
+function invalidate(){_bal=null;_hold=null}
+function load(){const d=readStore();if(d&&d.version===1){DB=d}else{seed();save()}invalidate()}
+function reloadFromStore(){const d=readStore();if(d)DB=d;invalidate()}
+/* mutate(): read latest, apply change, roll back completely on any error.
+   In production this is one DB transaction with row locks. */
+function mutate(fn){reloadFromStore();const snap=JSON.stringify(DB);
+  try{const r=fn();save();invalidate();return r}catch(e){DB=JSON.parse(snap);invalidate();throw e}}
+
+function balances(){if(_bal)return _bal;const b={};for(const r of DB.ledger)b[r.partId]=(b[r.partId]||0)+r.qty;return _bal=b}
+const stockOf=id=>balances()[id]||0;
+function holdings(){if(_hold)return _hold;const h={};for(const r of DB.ledger){if(!r.destinationId)continue;(h[r.destinationId]=h[r.destinationId]||{});h[r.destinationId][r.partId]=(h[r.destinationId][r.partId]||0)-r.qty}return _hold=h}
+const partById=id=>DB.parts.find(p=>p.id===id);
+const destById=id=>DB.destinations.find(d=>d.id===id);
+const reqById=id=>DB.requests.find(r=>r.id===id);
+const userById=id=>DB.users.find(u=>u.id===id);
+const activeParts=()=>DB.parts.filter(p=>p.active!==false);
+function statusOf(p,q){if(q<=0)return'out';if(q<=(+p.minQty||0))return'low';if(+p.maxQty&&q>+p.maxQty)return'over';return'ok'}
+function reversedSet(){return new Set(DB.ledger.filter(r=>r.reversesId).map(r=>r.reversesId))}
+function isIssuable(r){return r.status==='Approved'||r.status==='Partially issued'||(r.status==='Requested'&&!DB.settings.approvalRequired)}
+function fyLabel(ts){const d=new Date(ts);let y=d.getFullYear();if(d.getMonth()<3)y--;return y+'-'+String((y+1)%100).padStart(2,'0')}
+function nextNo(kind){const fy=fyLabel(now());const key=kind+fy;DB.counters[key]=(DB.counters[key]||0)+1;
+  const pre={DC:'JA/DC',REQ:'REQ',RTN:'RTN',ADJ:'ADJ',GRN:'GRN'}[kind];return pre+'/'+fy+'/'+String(DB.counters[key]).padStart(4,'0')}
+function resolvePart(v){if(!v)return null;v=v.trim();const code=v.split(' · ')[0].trim().toLowerCase();const act=activeParts();
+  let p=act.find(x=>x.partCode.toLowerCase()===code);if(p)return p;
+  p=act.find(x=>(x.sku||'').toLowerCase()===code&&code);if(p)return p;
+  const m=act.filter(x=>x.name.toLowerCase()===v.toLowerCase());return m.length===1?m[0]:null}
+function challanReturnable(challanNo,partId){let n=0;for(const r of DB.ledger)if(r.challanNo===challanNo&&r.partId===partId&&r.destinationId)n-=r.qty;return n}
+function refText(o){const a=[];if(o.chassis)a.push('Chassis '+o.chassis);if(o.salesInvoice)a.push('Inv '+o.salesInvoice);return a.length?' ('+a.join(', ')+')':''}
+
+/* =========================================================================
+   3. BUSINESS RULES (OPS). Each receives the acting user U.
+      These become server endpoints in production.
+   ========================================================================= */
+function hasPerm(U,p){const r=ROLES[U.role];return !!r&&(r.perms==='*'||r.perms.includes(p))}
+function audit(U,action,detail,entity){DB.audit.push({id:uid('AU'),ts:now(),userId:U?U.id:'',userName:U?U.name:'(unknown)',role:U?(ROLES[U.role]||{}).label:'',action,detail:detail||'',entity:entity||''})}
+function post(U,partId,qty,type,extra){
+  const p=partById(partId);if(!p)throw new Error('Unknown part');
+  const before=stockOf(partId),after=before+qty;
+  if(after<0&&!DB.settings.allowNegative)throw new Error('Not enough stock for '+p.partCode+' ('+p.name+'). Available '+before+', needed '+(-qty)+'.');
+  const row=Object.assign({id:uid('MV'),ts:now(),type,partId,partCode:p.partCode,partName:p.name,qty,before,after,userId:U.id,userName:U.name,userRole:(ROLES[U.role]||{}).label,
+    destinationId:null,destinationName:'',chassis:'',model:'',salesInvoice:'',supplierInvoice:'',challanNo:'',requestNo:'',requestedBy:'',issuedBy:'',reason:'',remarks:'',reversesId:null},extra||{});
+  DB.ledger.push(row);balances()[partId]=after;_hold=null;return row}
+function mergeLines(lines){const m={};for(const l of lines){const q=parseInt(l.qty,10);if(!(q>0))continue;m[l.partId]=(m[l.partId]||0)+q}return Object.keys(m).map(k=>({partId:k,qty:m[k]}))}
+function validateRef(dest,d){
+  const ch=(d.chassis||'').trim(),inv=(d.salesInvoice||'').trim();
+  if(ch&&ch.replace(/[^a-z0-9]/gi,'').length<4)throw new Error('Chassis number needs at least the last 4 characters.');
+  if(dest.type==='customer_vehicle'&&!ch&&!inv)throw new Error('For a customer vehicle, enter the chassis number (last 4 at least) or the sales invoice number.');
+  if(dest.type==='counter_sale'&&!inv)throw new Error('For a counter sale, the sales invoice number is required.')}
+
+const OPS={
+  stockIn(U,d){
+    if(!String(d.invoiceNo||'').trim())throw new Error('Enter the Royal Enfield invoice number.');
+    const lines=mergeLines(d.lines||[]);if(!lines.length)throw new Error('Add at least one part with a quantity.');
+    const grn=nextNo('GRN');
+    lines.forEach(l=>post(U,l.partId,l.qty,'IN',{supplierInvoice:d.invoiceNo.trim(),grnNo:grn,remarks:d.remarks||'',reason:'Received from '+(d.supplier||'Royal Enfield')}));
+    DB.inwards.push({no:grn,ts:now(),invoiceNo:d.invoiceNo.trim(),invoiceDate:d.invoiceDate||'',supplier:d.supplier||'',lines,userId:U.id,userName:U.name,remarks:d.remarks||''});
+    audit(U,'Stock in',grn+': invoice '+d.invoiceNo+', '+lines.length+' line(s), '+sum(lines,'qty')+' unit(s)',grn);return grn},
+  createRequest(U,d){
+    const dest=destById(d.destinationId);if(!dest||dest.active===false)throw new Error('Choose where the stock is going.');
+    validateRef(dest,d);const items=mergeLines(d.items||[]);if(!items.length)throw new Error('Add at least one part with a quantity.');
+    const rb=userById(d.requestedById)||U;
+    const r={id:uid('RQ'),no:nextNo('REQ'),ts:now(),status:'Requested',destinationId:dest.id,destinationName:dest.name,destType:dest.type,
+      chassis:(d.chassis||'').toUpperCase().trim(),model:d.model||'',salesInvoice:(d.salesInvoice||'').trim(),customer:(d.customer||'').trim(),
+      items:items.map(i=>{const p=partById(i.partId);return{partId:i.partId,partCode:p.partCode,partName:p.name,qty:i.qty,issued:0}}),
+      remarks:d.remarks||'',requestedById:rb.id,requestedByName:rb.name,createdById:U.id,createdByName:U.name,
+      history:[{ts:now(),by:U.name,action:'Requested'+(rb.id!==U.id?' on behalf of '+rb.name:'')}],challans:[]};
+    DB.requests.push(r);audit(U,'Request created',r.no+' to '+dest.name+refText(r)+', '+items.length+' line(s)',r.no);return r},
+  approve(U,id){const r=reqById(id);if(!r||r.status!=='Requested')throw new Error('Only a new request can be approved.');
+    r.status='Approved';r.approvedByName=U.name;r.history.push({ts:now(),by:U.name,action:'Approved'});audit(U,'Request approved',r.no,r.no)},
+  reject(U,id,reason){const r=reqById(id);if(!r||!['Requested','Approved'].includes(r.status))throw new Error('This request can no longer be rejected.');
+    if(!String(reason||'').trim())throw new Error('Give a reason for rejecting.');
+    r.status='Rejected';r.history.push({ts:now(),by:U.name,action:'Rejected: '+reason});audit(U,'Request rejected',r.no+': '+reason,r.no)},
+  cancel(U,id){const r=reqById(id);if(!r||!['Requested','Approved'].includes(r.status))throw new Error('Only requests with nothing issued can be cancelled.');
+    if(r.createdById!==U.id&&r.requestedById!==U.id&&!hasPerm(U,'request_approve')&&!hasPerm(U,'issue'))throw new Error('You can only cancel your own requests.');
+    r.status='Cancelled';r.history.push({ts:now(),by:U.name,action:'Cancelled'});audit(U,'Request cancelled',r.no,r.no)},
+  issue(U,id,lines,remarks){
+    const r=reqById(id);if(!r)throw new Error('Request not found.');
+    if(!isIssuable(r))throw new Error(DB.settings.approvalRequired&&r.status==='Requested'?'This request needs approval before it can be issued.':'This request cannot be issued in its current state.');
+    lines=mergeLines(lines||[]);if(!lines.length)throw new Error('Enter at least one quantity to issue.');
+    const c={no:nextNo('DC'),ts:now(),requestId:r.id,requestNo:r.no,destinationId:r.destinationId,destinationName:r.destinationName,destType:r.destType,chassis:r.chassis,model:r.model,
+      salesInvoice:r.salesInvoice,customer:r.customer,items:[],requestedByName:r.requestedByName,issuedById:U.id,issuedByName:U.name,remarks:remarks||''};
+    for(const l of lines){const it=r.items.find(i=>i.partId===l.partId);if(!it)throw new Error('Part is not on this request.');
+      const rem=it.qty-it.issued;if(l.qty>rem)throw new Error(it.partCode+': only '+rem+' left to issue on this request.');
+      post(U,l.partId,-l.qty,'ISSUE',{destinationId:r.destinationId,destinationName:r.destinationName,chassis:r.chassis,model:r.model,salesInvoice:r.salesInvoice,
+        challanNo:c.no,requestNo:r.no,requestedBy:r.requestedByName,issuedBy:U.name,remarks:remarks||''});
+      it.issued+=l.qty;c.items.push({partId:l.partId,partCode:it.partCode,partName:it.partName,qty:l.qty})}
+    r.status=r.items.every(i=>i.issued>=i.qty)?'Issued':'Partially issued';r.challans.push(c.no);
+    r.history.push({ts:now(),by:U.name,action:'Issued '+sum(c.items,'qty')+' unit(s) on '+c.no});
+    DB.challans.push(c);audit(U,'Stock issued',c.no+' for '+r.no+' to '+r.destinationName+refText(r)+', '+sum(c.items,'qty')+' unit(s)',c.no);return c},
+  closeShort(U,id){const r=reqById(id);if(!r||r.status!=='Partially issued')throw new Error('Only a partially issued request can be closed short.');
+    r.status='Closed short';r.history.push({ts:now(),by:U.name,action:'Closed with balance not issued'});audit(U,'Request closed short',r.no,r.no)},
+  createAndIssue(U,d){if(!hasPerm(U,'request_create'))throw new Error('You do not have permission to raise requests.');
+    const r=OPS.createRequest(U,d);if(DB.settings.approvalRequired&&!hasPerm(U,'request_approve')){return{request:r,challan:null}}
+    if(DB.settings.approvalRequired)OPS.approve(U,r.id);
+    const c=OPS.issue(U,r.id,r.items.map(i=>({partId:i.partId,qty:i.qty})),d.remarks);return{request:r,challan:c}},
+  returnStock(U,d){
+    const lines=mergeLines(d.lines||[]);if(!lines.length)throw new Error('Enter at least one quantity to return.');
+    if(!String(d.remarks||'').trim())throw new Error('Add a short note on why it came back.');
+    let dest,ch=null;
+    if(d.mode==='challan'){ch=DB.challans.find(c=>c.no===d.challanNo);if(!ch)throw new Error('Choose a challan.');dest=destById(ch.destinationId)}
+    else{dest=destById(d.destinationId);if(!dest)throw new Error('Choose a destination.')}
+    const no=nextNo('RTN');const hold=holdings()[dest.id]||{};
+    for(const l of lines){const p=partById(l.partId);
+      const max=ch?challanReturnable(ch.no,l.partId):(hold[l.partId]||0);
+      if(l.qty>max)throw new Error(p.partCode+': only '+max+' can be returned from '+(ch?ch.no:dest.name)+'.');
+      post(U,l.partId,l.qty,'RETURN',{destinationId:dest.id,destinationName:dest.name,chassis:ch?ch.chassis:'',model:ch?ch.model:'',salesInvoice:ch?ch.salesInvoice:'',
+        challanNo:ch?ch.no:'',returnNo:no,reason:d.condition==='damaged'?'Returned damaged':'Returned in good condition',remarks:d.remarks});
+      if(d.condition==='damaged')post(U,l.partId,-l.qty,'ADJUST',{returnNo:no,reason:'Damaged on return, written off',remarks:d.remarks})}
+    audit(U,'Stock returned',no+' from '+(ch?ch.no+' / ':'')+dest.name+', '+sum(lines,'qty')+' unit(s), '+(d.condition==='damaged'?'damaged':'good'),no);return no},
+  adjust(U,d){const p=partById(d.partId);if(!p)throw new Error('Choose a part.');const q=parseInt(d.qty,10);if(!q)throw new Error('Enter a quantity.');
+    if(!String(d.remarks||'').trim())throw new Error('Remarks are required for every adjustment.');
+    const no=nextNo('ADJ');post(U,p.id,q,'ADJUST',{adjustNo:no,reason:d.reason,remarks:d.remarks});
+    audit(U,'Stock adjusted',no+': '+p.partCode+' '+(q>0?'+':'')+q+' ('+d.reason+')',no);return no},
+  reverse(U,rowId,reason){const row=DB.ledger.find(r=>r.id===rowId);if(!row)throw new Error('Entry not found.');
+    if(row.type==='REVERSAL')throw new Error('A reversal cannot itself be reversed. Make an adjustment instead.');
+    if(reversedSet().has(row.id))throw new Error('This entry has already been reversed.');
+    if(!String(reason||'').trim())throw new Error('Give a reason for the reversal.');
+    post(U,row.partId,-row.qty,'REVERSAL',{reversesId:row.id,destinationId:row.destinationId,destinationName:row.destinationName,chassis:row.chassis,salesInvoice:row.salesInvoice,
+      challanNo:row.challanNo,supplierInvoice:row.supplierInvoice,requestNo:row.requestNo,reason:'Reverses '+MV[row.type][0]+' of '+fmtDT(row.ts),remarks:reason});
+    audit(U,'Entry reversed',row.partCode+' '+MV[row.type][0]+' '+row.qty+' from '+fmtDT(row.ts)+': '+reason,row.id)},
+  savePart(U,d){const code=String(d.partCode||'').trim().toUpperCase();if(!code)throw new Error('Part code is required.');
+    if(!String(d.name||'').trim())throw new Error('Part name is required.');
+    const dup=DB.parts.find(p=>p.partCode.toUpperCase()===code&&p.id!==d.id);if(dup)throw new Error('Part code '+code+' already exists.');
+    const fields={partCode:code,sku:(d.sku||'').trim(),name:d.name.trim(),category:(d.category||'').trim()||'General',model:d.model||'Universal',uom:d.uom||'Nos',rack:(d.rack||'').trim(),
+      purchasePrice:+d.purchasePrice||0,sellingPrice:+d.sellingPrice||0,gst:+d.gst||0,minQty:+d.minQty||0,maxQty:+d.maxQty||0,barcode:(d.barcode||'').trim(),description:(d.description||'').trim()};
+    if(d.id){const p=partById(d.id);const before=JSON.stringify(p);Object.assign(p,fields);audit(U,'Part edited',code+' '+fields.name,p.id);return p}
+    const p=Object.assign({id:uid('PT'),active:true,createdAt:now()},fields);DB.parts.push(p);
+    const oq=parseInt(d.openingQty,10);if(oq>0)post(U,p.id,oq,'OPENING',{remarks:'Opening stock on part creation'});
+    audit(U,'Part created',code+' '+fields.name+(oq>0?', opening '+oq:''),p.id);return p},
+  setPartActive(U,id,active){const p=partById(id);if(!p)throw new Error('Part not found.');p.active=!!active;audit(U,active?'Part reactivated':'Part deactivated',p.partCode+' '+p.name,p.id)},
+  saveDestination(U,d){if(!String(d.name||'').trim())throw new Error('Destination name is required.');if(!DEST_TYPES[d.type])throw new Error('Choose a type.');
+    if(d.id){const x=destById(d.id);x.name=d.name.trim();x.type=d.type;x.note=d.note||'';audit(U,'Destination edited',x.name,x.id);return x}
+    const x={id:uid('DS'),name:d.name.trim(),type:d.type,note:d.note||'',active:true};DB.destinations.push(x);audit(U,'Destination created',x.name,x.id);return x},
+  setDestinationActive(U,id,active){const x=destById(id);x.active=!!active;audit(U,active?'Destination reactivated':'Destination deactivated',x.name,x.id)},
+  saveUser(U,d){const un=String(d.username||'').trim().toLowerCase();if(!/^[a-z0-9._-]{3,30}$/.test(un))throw new Error('Username: 3 to 30 letters, numbers, dots or dashes.');
+    if(!String(d.name||'').trim())throw new Error('Name is required.');if(!ROLES[d.role])throw new Error('Choose a role.');
+    if(d.role==='super_admin'&&U.role!=='super_admin')throw new Error('Only a Super Admin can create another Super Admin.');
+    if(DB.users.find(x=>x.username===un&&x.id!==d.id&&!x.deleted))throw new Error('Username already in use.');
+    if(d.id){const x=userById(d.id);if(x.role==='super_admin'&&U.role!=='super_admin')throw new Error('Only a Super Admin can edit a Super Admin.');
+      if(x.id===U.id&&d.role!==x.role)throw new Error('You cannot change your own role.');
+      x.name=d.name.trim();x.username=un;x.role=d.role;x.phone=d.phone||'';audit(U,'User edited',x.name+' ('+ROLES[x.role].label+')',x.id);return x}
+    if(String(d.password||'').length<8)throw new Error('Password must be at least 8 characters.');
+    const salt=randHex(16);const x={id:uid('US'),name:d.name.trim(),username:un,role:d.role,phone:d.phone||'',salt,hash:hashPw(d.password,salt),active:true,deleted:false,createdAt:now(),lastLogin:null};
+    DB.users.push(x);audit(U,'User created',x.name+' ('+ROLES[x.role].label+')',x.id);return x},
+  resetPassword(U,id,pw){const x=userById(id);if(String(pw||'').length<8)throw new Error('Password must be at least 8 characters.');
+    if(x.role==='super_admin'&&U.role!=='super_admin')throw new Error('Only a Super Admin can reset a Super Admin password.');
+    x.salt=randHex(16);x.hash=hashPw(pw,x.salt);audit(U,'Password reset',x.name,x.id)},
+  setUserActive(U,id,active){const x=userById(id);if(x.id===U.id)throw new Error('You cannot deactivate yourself.');
+    if(x.role==='super_admin'&&U.role!=='super_admin')throw new Error('Only a Super Admin can change a Super Admin.');
+    x.active=!!active;audit(U,active?'User activated':'User deactivated',x.name,x.id)},
+  removeUser(U,id){const x=userById(id);if(x.id===U.id)throw new Error('You cannot remove yourself.');
+    if(x.role==='super_admin'&&U.role!=='super_admin')throw new Error('Only a Super Admin can remove a Super Admin.');
+    x.deleted=true;x.active=false;audit(U,'User removed',x.name+' (history kept)',x.id)},
+  changeOwnPassword(U,oldPw,newPw){const x=userById(U.id);if(x.hash!==hashPw(oldPw,x.salt))throw new Error('Current password is incorrect.');
+    if(String(newPw||'').length<8)throw new Error('New password must be at least 8 characters.');x.salt=randHex(16);x.hash=hashPw(newPw,x.salt);audit(U,'Changed own password','',x.id)},
+  saveSettings(U,s){Object.assign(DB.settings,s);audit(U,'Settings changed',Object.entries(s).map(([k,v])=>k+'='+v).join(', '),'settings')},
+  importParts(U,rows){let created=0,skipped=0,units=0;
+    for(const r of rows){const code=String(r.part_code||'').trim().toUpperCase();if(!code||!String(r.name||'').trim()){skipped++;continue}
+      if(DB.parts.find(p=>p.partCode.toUpperCase()===code)){skipped++;continue}
+      OPS.savePart(U,{partCode:code,name:r.name,category:r.category,model:r.model,sku:r.sku,uom:r.uom,rack:r.rack,purchasePrice:r.purchase_price,sellingPrice:r.selling_price,gst:r.gst,minQty:r.min_qty,maxQty:r.max_qty,openingQty:r.opening_qty});
+      created++;units+=parseInt(r.opening_qty,10)||0}
+    audit(U,'Parts imported',created+' created, '+skipped+' skipped, '+units+' opening units','import');return{created,skipped,units}}
+};
+const PERM_FOR={stockIn:'stock_in',createRequest:'request_create',approve:'request_approve',reject:'request_approve',issue:'issue',closeShort:'issue',createAndIssue:'issue',
+  returnStock:'return',adjust:'adjust',reverse:'reverse',savePart:'parts_edit',setPartActive:'parts_deactivate',saveDestination:'destinations_edit',setDestinationActive:'destinations_edit',
+  saveUser:'users_manage',resetPassword:'users_manage',setUserActive:'users_manage',removeUser:'users_manage',saveSettings:'settings',importParts:'settings'};
+
+/* The only way the UI changes data. Mirrors a server endpoint. */
+const API={call(action,...args){
+  const s=getSession();if(!s){signOut(true);throw new Error('Your session has expired. Please sign in again.')}
+  return mutate(()=>{const U=DB.users.find(u=>u.id===s.userId&&u.active&&!u.deleted);if(!U)throw new Error('Your account is no longer active.');
+    const perm=PERM_FOR[action];if(perm&&!hasPerm(U,perm))throw new Error('Your role does not allow this action.');
+    return OPS[action](U,...args)})}};
+
+/* =========================================================================
+   4. SESSION & LOGIN
+   ========================================================================= */
+let ME=null;
+function getSession(){try{const s=JSON.parse(sessionStorage.getItem(SESSION_KEY));if(s&&s.exp>Date.now())return s}catch(e){}return null}
+function currentUser(){const s=getSession();if(!s)return null;const u=DB.users.find(x=>x.id===s.userId&&x.active&&!x.deleted);return u||null}
+function signIn(username,pw){
+  reloadFromStore();username=String(username||'').trim().toLowerCase();
+  const g=DB.loginGuard[username];if(g&&g.until>Date.now())throw new Error('Too many failed attempts. Try again in '+Math.ceil((g.until-Date.now())/60000)+' minute(s).');
+  const U=DB.users.find(u=>u.username===username&&!u.deleted);const ok=U&&U.hash===hashPw(pw,U.salt);
+  if(!ok){const gg=DB.loginGuard[username]||{fails:0,until:0};gg.fails++;let msg='Incorrect username or password.';
+    if(gg.fails>=5){gg.until=Date.now()+5*60000;gg.fails=0;msg='Too many failed attempts. Sign-in locked for 5 minutes.'}
+    DB.loginGuard[username]=gg;audit(U||null,'Sign-in failed','Username "'+username+'"','auth');save();throw new Error(msg)}
+  if(!U.active){audit(U,'Sign-in blocked','Account deactivated','auth');save();throw new Error('This account has been deactivated. Contact the administrator.')}
+  delete DB.loginGuard[username];U.lastLogin=Date.now();audit(U,'Signed in','','auth');save();
+  sessionStorage.setItem(SESSION_KEY,JSON.stringify({userId:U.id,exp:Date.now()+(DB.settings.sessionHours||10)*3600e3}));ME=U}
+function signOut(silent){if(ME&&!silent){try{mutate(()=>audit(ME,'Signed out','','auth'))}catch(e){}}sessionStorage.removeItem(SESSION_KEY);ME=null;closeModal();location.hash='';render()}
+const can=p=>!!ME&&hasPerm(ME,p);
+
+/* =========================================================================
+   5. DEMO DATA (sample only; clear it from Settings > Data)
+   ========================================================================= */
+const DEMO_PW='Demo@2026',SUPER_PW='Jain@11614';
+function seed(){
+  DB=baseDB();
+  const mk=(id,name,username,role,pw)=>{const salt=randHex(16);return{id,name,username,role,phone:'',salt,hash:hashPw(pw,salt),active:true,deleted:false,createdAt:Date.now(),lastLogin:null}};
+  DB.users.push(mk('US_SUPER','Super Admin','superadmin','super_admin',SUPER_PW));
+  [['US_OWNER','Dealer Principal','owner','owner'],['US_SM','Rohit Sharma','salesmgr','sales_manager'],['US_SVM','Anil Kumar','servicemgr','service_manager'],
+   ['US_WH','Sunil Verma','warehouse','warehouse_manager'],['US_IN','Deepak Saini','stockin','stock_in'],['US_ST','Manoj Yadav','store','storekeeper'],
+   ['US_SR1','Aman Gupta','sales','sales_rep'],['US_SR2','Karan Mehta','sales2','sales_rep'],['US_VW','Front Desk','viewer','viewer']]
+   .forEach(u=>DB.users.push(mk(u[0],u[1],u[2],u[3],DEMO_PW)));
+  [['DS_CUST','Customer vehicle','customer_vehicle'],['DS_COUNTER','Counter sale','counter_sale'],['DS_SWALL','Sales display wall','display'],['DS_SVWALL','Service display wall','display'],
+   ['DS_DB1','Display bike: Classic 350 (showroom)','display'],['DS_DB2','Display bike: Himalayan 450 (showroom)','display'],['DS_WS','Service workshop','department'],['DS_GD2','Offsite storage: Godown 2','offsite']]
+   .forEach(d=>DB.destinations.push({id:d[0],name:d[1],type:d[2],note:'',active:true}));
+  // code,name,category,model,cost,sell,gst,min,max,rack,opening
+  const P=[
+   ['GMA-HLM-101','Open-face helmet, matt black','Helmets','Universal',2100,2850,18,3,12,'A-01',8],
+   ['GMA-HLM-114','Full-face helmet, gloss red','Helmets','Universal',3300,4400,18,2,8,'A-02',3],
+   ['GMA-GLV-210','Riding gloves, touring (L)','Riding gear','Universal',1350,1850,18,4,15,'B-04',14],
+   ['GMA-JKT-305','Riding jacket, textile (XL)','Riding gear','Universal',5400,7200,18,1,6,'B-01',6],
+   ['GMA-SEAT-C35','Touring seat, dual','Comfort','Classic 350',3600,4800,28,2,8,'C-02',5],
+   ['GMA-BR-C35','Pillion backrest, black','Comfort','Classic 350',1750,2350,28,3,10,'C-05',9],
+   ['GMA-EG-M35','Engine guard, black','Protection','Meteor 350',2700,3650,28,3,10,'D-01',7],
+   ['GMA-EG-H35','Engine guard, silver','Protection','Hunter 350',2500,3350,28,2,8,'D-02',2],
+   ['GMA-SG-HM4','Sump guard, aluminium','Protection','Himalayan 450',3100,4150,28,2,6,'D-05',4],
+   ['GMA-WS-M35','Touring windscreen, tall','Styling','Meteor 350',2250,3000,28,2,8,'E-01',6],
+   ['GMA-PR-HM4','Pannier rails, black','Luggage','Himalayan 450',4400,5900,28,1,5,'F-01',3],
+   ['GMA-SB-UNI','Saddle bag, 18 L waxed canvas','Luggage','Universal',2600,3500,18,2,8,'F-03',5],
+   ['GMA-TB-UNI','Tank bag, magnetic','Luggage','Universal',1900,2550,18,2,8,'F-04',4],
+   ['GMA-FL-LED','LED fog lamp kit','Electricals','Universal',3800,5100,28,2,8,'G-01',5],
+   ['GMA-USB-C2','USB charger, dual port','Electricals','Universal',850,1150,28,5,20,'G-03',18],
+   ['GMA-MR-BE6','Bar-end mirrors, pair','Styling','Interceptor 650',2300,3100,28,1,6,'E-04',4],
+   ['GMA-TP-C35','Tank pad, rubber','Styling','Classic 350',450,650,28,5,20,'E-06',40],
+   ['GMA-BC-UNI','Bike cover, all-weather','Care','Universal',950,1300,18,3,12,'H-01',11],
+   ['GMA-HB-C65','Handlebar brace','Styling','Continental GT 650',1500,2050,28,1,4,'E-08',3],
+   ['GMA-LG-B35','Leg guard, chrome','Protection','Bullet 350',2200,2950,28,2,8,'D-07',6]];
+  const U=id=>userById(id);const T0=Date.now();
+  CLOCK=T0-50*DAY;
+  P.forEach((r,i)=>{const p={id:'PT_'+String(i+1).padStart(2,'0'),partCode:r[0],sku:'JA-'+String(1001+i),name:r[1],category:r[2],model:r[3],uom:'Nos',rack:r[9],purchasePrice:r[4],sellingPrice:r[5],gst:r[6],minQty:r[7],maxQty:r[8],barcode:'',description:'',active:true,createdAt:CLOCK};
+    DB.parts.push(p);post(U('US_IN'),p.id,r[10],'OPENING',{remarks:'Opening stock from physical count (sample)'})});
+  audit(U('US_SUPER'),'Opening stock loaded','20 parts from physical count (sample data)','seed');
+  const pid=n=>'PT_'+String(n).padStart(2,'0');
+  const ev=[];
+  ev.push([-30,()=>OPS.stockIn(U('US_IN'),{invoiceNo:'RE/GMA/26/48213',supplier:'Royal Enfield (GMA)',lines:[{partId:pid(2),qty:2},{partId:pid(5),qty:2},{partId:pid(15),qty:10},{partId:pid(11),qty:2}],remarks:'Monthly GMA billing'})]);
+  ev.push([-10,()=>OPS.stockIn(U('US_IN'),{invoiceNo:'RE/GMA/26/51077',supplier:'Royal Enfield (GMA)',lines:[{partId:pid(7),qty:3},{partId:pid(14),qty:2}],remarks:''})]);
+  // day, part, qty, dest, chassis, model, invoice, requester
+  const I=[[-46,3,2,'DS_CUST','8F21','Classic 350','','US_SR1'],[-44,6,1,'DS_CUST','8F21','Classic 350','','US_SR1'],[-43,17,2,'DS_SWALL','','','','US_SM'],
+   [-40,8,1,'DS_CUST','3K77','Hunter 350','','US_SR2'],[-38,1,1,'DS_COUNTER','','','JA/SI/0412','US_SR1'],[-35,2,1,'DS_CUST','9A04','Meteor 350','','US_SR2'],
+   [-33,10,1,'DS_CUST','9A04','Meteor 350','','US_SR2'],[-32,7,1,'DS_CUST','9A04','Meteor 350','','US_SR2'],[-29,11,1,'DS_DB2','','','','US_SM'],
+   [-28,9,1,'DS_DB2','','','','US_SM'],[-26,13,2,'DS_CUST','5T19','Himalayan 450','','US_SR1'],[-25,15,3,'DS_COUNTER','','','JA/SI/0467','US_SR1'],
+   [-22,5,1,'DS_DB1','','','','US_SM'],[-21,6,1,'DS_DB1','','','','US_SM'],[-20,3,3,'DS_CUST','2C88','Classic 350','','US_SR2'],
+   [-18,12,1,'DS_CUST','2C88','Classic 350','','US_SR2'],[-16,8,1,'DS_CUST','6H40','Hunter 350','','US_SR1'],[-15,13,2,'DS_COUNTER','','','JA/SI/0501','US_SR2'],
+   [-13,15,4,'DS_WS','','','','US_SVM'],[-12,2,1,'DS_CUST','7M12','Meteor 350','','US_SR1'],[-9,2,2,'DS_COUNTER','','','JA/SI/0533','US_SR2'],
+   [-8,14,1,'DS_CUST','4B63','Classic 350','','US_SR1'],[-6,1,2,'DS_CUST','4B63','Classic 350','','US_SR1'],[-5,3,4,'DS_CUST','1R09','Himalayan 450','','US_SR2'],
+   [-4,18,1,'DS_GD2','','','','US_WH'],[-3,10,2,'DS_COUNTER','','','JA/SI/0548','US_SR1'],[-2,7,2,'DS_CUST','3P55','Meteor 350','','US_SR2'],
+   [-1,15,2,'DS_CUST','3P55','Meteor 350','','US_SR2'],[-1,5,1,'DS_CUST','6D21','Classic 350','','US_SR1']];
+  I.forEach(x=>ev.push([x[0],()=>{const r=OPS.createRequest(U(x[7]),{destinationId:x[3],chassis:x[4],model:x[5],salesInvoice:x[6],items:[{partId:pid(x[1]),qty:x[2]}],requestedById:x[7]});
+    CLOCK+=18*60000;OPS.issue(U('US_ST'),r.id,[{partId:pid(x[1]),qty:x[2]}],'')}]));
+  ev.push([-14,()=>OPS.returnStock(U('US_WH'),{mode:'destination',destinationId:'DS_SWALL',lines:[{partId:pid(17),qty:1}],condition:'good',remarks:'Display wall refreshed'})]);
+  ev.push([-7,()=>OPS.adjust(U('US_WH'),{partId:pid(17),qty:-1,reason:'Damaged in store',remarks:'Torn during handling'})]);
+  ev.sort((a,b)=>a[0]-b[0]);
+  ev.forEach((e,i)=>{CLOCK=T0+e[0]*DAY-(6-(i%5))*3600e3;e[1]()});
+  CLOCK=T0-2*3600e3;
+  const pr=OPS.createRequest(U('US_SR2'),{destinationId:'DS_CUST',chassis:'K7Q2',model:'Classic 350',items:[{partId:pid(3),qty:2},{partId:pid(13),qty:1}],remarks:'Customer collecting Saturday',requestedById:'US_SR2'});
+  CLOCK+=15*60000;OPS.issue(U('US_ST'),pr.id,[{partId:pid(3),qty:2}],'Tank bag out of stock, balance pending');
+  CLOCK=T0-40*60000;
+  OPS.createRequest(U('US_SR1'),{destinationId:'DS_CUST',chassis:'9Z31',model:'Himalayan 450',customer:'Walk-in, test ride booked',items:[{partId:pid(11),qty:1},{partId:pid(9),qty:1}],remarks:'Fit before delivery',requestedById:'US_SR1'});
+  CLOCK=null;
+}
+
+/* =========================================================================
+   6. UI PRIMITIVES
+   ========================================================================= */
+const IC={
+ grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+ box:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
+ in:'<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/>',
+ out:'<path d="M12 15V3"/><path d="M7 8l5-5 5 5"/><path d="M4 21h16"/>',
+ clip:'<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9z"/><path d="M9 12h6M9 16h4"/>',
+ doc:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>',
+ undo:'<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+ list:'<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
+ pin:'<path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+ chart:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+ users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
+ shield:'<path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+ cog:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+ more:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',search:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',
+ logout:'<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l5-5-5-5"/><path d="M15 12H4"/>',
+ down:'<path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/>',print:'<path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/>',
+ alert:'<path d="M12 3l9.5 17h-19z"/><path d="M12 10v4M12 17.5v.01"/>',
+ bike:'<circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M5.5 16.5l4-7h5l4 7M9.5 9.5L8 6H5.5M14.5 9.5l1.5-3h2.5"/>',
+ edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/>',check:'<path d="M5 12l5 5 9-10"/>',key:'<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/>',
+ sheet:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>'
+};
+const icon=(n,s=20)=>'<svg class="ic" width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(IC[n]||'')+'</svg>';
+const badge=(t,c)=>'<span class="badge '+c+'">'+esc(t)+'</span>';
+const stBadge=s=>badge(STATUS_L[s][0],STATUS_L[s][1]);
+const mvBadge=t=>badge(MV[t][0],MV[t][1]);
+const reqBadge=s=>badge(s,REQ_B[s]||'muted');
+function toast(msg,type){const t=document.createElement('div');t.className='toast '+(type||'ok');t.textContent=msg;$('#toasts').appendChild(t);setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300)},type==='error'?5200:3200)}
+function openModal(o){const size=o.size||'';$('#modal-root').innerHTML='<div class="overlay" onmousedown="if(event.target===this)App.closeModal()"><div class="modal '+size+'" role="dialog" aria-modal="true" aria-label="'+esc(o.title)+'">'+
+  '<div class="modal-head"><h2>'+esc(o.title)+'</h2>'+(o.headExtra||'')+'<button class="icon-btn" onclick="App.closeModal()" aria-label="Close">'+icon('x')+'</button></div>'+
+  '<div class="modal-body">'+o.body+'</div>'+(o.foot?'<div class="modal-foot">'+o.foot+'</div>':'')+'</div></div>';
+  const f=$('#modal-root input:not([type=hidden]):not([readonly]),#modal-root select,#modal-root textarea');if(f&&window.innerWidth>699&&o.focus!==false)setTimeout(()=>f.focus(),30)}
+function closeModal(){$('#modal-root').innerHTML=''}
+function ask(title,msg,okLabel,danger,withInput){return new Promise(res=>{
+  openModal({title,size:'narrow',body:'<p style="margin:0 0 12px">'+msg+'</p>'+(withInput?'<label class="field">'+esc(withInput)+'<textarea id="ask-in" rows="3"></textarea></label>':''),
+    foot:'<button class="btn ghost" id="ask-no">Cancel</button><button class="btn '+(danger?'danger':'primary')+'" id="ask-yes">'+esc(okLabel||'Confirm')+'</button>'});
+  $('#ask-no').onclick=()=>{closeModal();res(null)};$('#ask-yes').onclick=()=>{const v=withInput?$('#ask-in').value:true;closeModal();res(v===''?'':v)}})}
+function tableHTML(cols,rows,o){o=o||{};if(!rows.length)return'<div class="empty">'+(o.empty||'Nothing to show yet.')+'</div>';
+  return'<div class="table-wrap"><table class="t '+(o.cards===false?'':'tcards')+'"><thead><tr>'+cols.map(c=>'<th class="'+(c.num?'num':'')+'">'+esc(c.label)+'</th>').join('')+'</tr></thead><tbody>'+
+  rows.map(r=>'<tr '+(o.rowAttr?o.rowAttr(r):'')+'>'+cols.map((c,i)=>'<td class="'+(c.num?'num ':'')+(i===0?'lead':'')+(c.cls?' '+c.cls:'')+'" data-label="'+esc(c.label)+'">'+(c.html?c.html(r):esc(c.fmt?c.fmt(r[c.k],r):r[c.k]))+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'}
+function csvCell(v){v=v==null?'':String(v);return/[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function toCSV(cols,rows){return'﻿'+[cols.map(c=>csvCell(c.label)).join(','),...rows.map(r=>cols.map(c=>csvCell(c.csv?c.csv(r):(c.fmt?c.fmt(r[c.k],r):r[c.k]))).join(','))].join('\r\n')}
+function download(name,text,type){const b=new Blob([text],{type:type||'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500)}
+function parseCSV(t){t=t.replace(/^﻿/,'');const rows=[];let row=[],f='',q=false;
+  for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true;else if(c===','){row.push(f);f=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&t[i+1]==='\n')i++;row.push(f);rows.push(row);row=[];f=''}else f+=c}
+  if(f!==''||row.length){row.push(f);rows.push(row)}return rows.filter(r=>r.some(x=>x.trim()!==''))}
+const stamp=()=>isoDate(Date.now());
+function partsDatalist(){return'<datalist id="dl-parts">'+activeParts().map(p=>'<option value="'+esc(p.partCode+' · '+p.name)+'"></option>').join('')+'</datalist>'}
+function linesEditor(id){return'<div class="lines" id="'+id+'"><div class="lines-head"><span>Part</span><span>Qty</span><span></span></div><div class="lines-body" style="display:flex;flex-direction:column;gap:10px"></div><button type="button" class="btn ghost sm" onclick="App.addLine(\''+id+'\')">'+icon('plus',16)+' Add another part</button></div>'}
+function readLines(id){const out=[];for(const row of $$('#'+id+' .line')){const pv=row.querySelector('.ln-part').value.trim();const q=parseInt(row.querySelector('.ln-qty').value,10);
+  if(!pv&&!q)continue;const p=resolvePart(pv);if(!p)throw new Error('Part not found: "'+pv+'". Pick it from the list.');if(!(q>0))throw new Error('Enter a quantity for '+p.partCode+'.');out.push({partId:p.id,qty:q})}
+  if(!out.length)throw new Error('Add at least one part with a quantity.');return out}
+function userOptions(sel,filter){return DB.users.filter(u=>u.active&&!u.deleted&&(!filter||filter(u))).map(u=>'<option value="'+u.id+'" '+(u.id===sel?'selected':'')+'>'+esc(u.name)+' · '+esc(ROLES[u.role].label)+'</option>').join('')}
+function destOptions(sel){const g={};DB.destinations.filter(d=>d.active!==false).forEach(d=>{(g[d.type]=g[d.type]||[]).push(d)});
+  return'<option value="">Select destination</option>'+Object.keys(DEST_TYPES).filter(t=>g[t]).map(t=>'<optgroup label="'+esc(DEST_TYPES[t])+'">'+g[t].map(d=>'<option value="'+d.id+'" '+(d.id===sel?'selected':'')+'>'+esc(d.name)+'</option>').join('')+'</optgroup>').join('')}
+function refCell(r){const a=[];if(r.challanNo)a.push('<span class="chip">'+esc(r.challanNo)+'</span>');if(r.chassis)a.push('<span class="chip">Chassis '+esc(r.chassis)+'</span>');
+  if(r.salesInvoice)a.push('<span class="chip">Inv '+esc(r.salesInvoice)+'</span>');if(r.supplierInvoice)a.push('<span class="chip">RE '+esc(r.supplierInvoice)+'</span>');
+  if(r.destinationName)a.push('<span class="sub">'+esc(r.destinationName)+'</span>');if(r.reason&&r.type!=='IN')a.push('<span class="sub">'+esc(r.reason)+'</span>');
+  return'<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">'+a.join('')+'</div>'}
+const qtyCell=q=>'<span class="'+(q>0?'qpos':'qneg')+'">'+(q>0?'+':'')+q+'</span>';
+
+/* =========================================================================
+   7. ROUTES & SHELL
+   ========================================================================= */
+const ROUTES={
+  dashboard:{t:'Dashboard',i:'grid',g:'Overview',r:()=>vDashboard()},
+  inventory:{t:'Inventory',i:'box',g:'Overview',r:()=>vInventory()},
+  stockin:{t:'Stock In',i:'in',g:'Operations',perm:'stock_in',r:()=>vStockIn(),after:()=>afterStockIn()},
+  requests:{t:'Requests & Issue',s:'Requests',i:'clip',g:'Operations',any:['request_create','request_approve','issue'],r:()=>vRequests()},
+  challans:{t:'Delivery Challans',s:'Challans',i:'doc',g:'Operations',any:['issue','reports','request_approve'],r:()=>vChallans()},
+  returns:{t:'Returns & Adjustments',s:'Returns',i:'undo',g:'Operations',any:['return','adjust'],r:()=>vReturns(),after:()=>afterReturns()},
+  destinations:{t:'Destinations & Bikes',s:'Bikes',i:'bike',g:'Traceability',r:()=>vDestinations()},
+  ledger:{t:'Stock Ledger',s:'Ledger',i:'list',g:'Traceability',perm:'reports',r:()=>vLedger()},
+  reports:{t:'Reports',i:'chart',g:'Traceability',perm:'reports',r:()=>vReports()},
+  users:{t:'Users',i:'users',g:'Admin',perm:'users_manage',r:()=>vUsers()},
+  audit:{t:'Audit Log',s:'Audit',i:'shield',g:'Admin',perm:'audit_view',r:()=>vAudit()},
+  settings:{t:'Settings & Data',s:'Settings',i:'cog',g:'Admin',perm:'settings',r:()=>vSettings()}
+};
+const allowed=k=>{const r=ROUTES[k];if(!r)return false;if(r.perm&&!can(r.perm))return false;if(r.any&&!r.any.some(can))return false;return true};
+let ROUTE='dashboard';
+const VS={inv:{q:'',cat:'',model:'',st:''},req:{tab:'open',mine:false},led:{q:'',type:'',from:'',to:''},ret:'return',rep:null,repF:{},chassisQ:'',aud:'',prefill:null};
+function openCount(){let rs=DB.requests.filter(r=>isIssuable(r)||(r.status==='Requested'));if(ME&&ME.role==='sales_rep')rs=rs.filter(r=>r.requestedById===ME.id||r.createdById===ME.id);return rs.length}
+function shell(){const route=ROUTES[ROUTE];let groups='',last='';const oc=openCount();
+  Object.keys(ROUTES).filter(allowed).forEach(k=>{const r=ROUTES[k];if(r.g!==last){groups+='<div class="nav-label">'+r.g+'</div>';last=r.g}
+    groups+='<a href="#/'+k+'" class="'+(k===ROUTE?'on':'')+'" title="'+esc(r.t)+'">'+icon(r.i)+'<span class="lbl">'+esc(r.s||r.t)+'</span>'+(k==='requests'&&oc?'<span class="count">'+oc+'</span>':'')+'</a>'});
+  const bn=['dashboard','inventory','requests',can('stock_in')?'stockin':(allowed('destinations')?'destinations':'reports')].filter(allowed);
+  return'<div class="shell"><aside class="sidebar"><div class="brand"><div class="brand-mark">JA</div><div class="brand-text"><div class="brand-name">JAIN AUTOMOBILES</div><div class="brand-sub">GMA &amp; Parts Stock · '+esc(DB.settings.branch)+'</div></div></div>'+
+   '<nav class="nav">'+groups+'</nav>'+
+   '<div class="me" onclick="App.account()" title="Account"><div class="avatar">'+esc(initials(ME.name))+'</div><div class="me-info"><div class="n">'+esc(ME.name)+'</div><div class="r">'+esc(ROLES[ME.role].label)+'</div></div><button class="icon-btn" onclick="event.stopPropagation();App.signOut()" title="Sign out" aria-label="Sign out">'+icon('logout',18)+'</button></div></aside>'+
+   '<div class="main"><header class="topbar"><div class="mob-brand"><div class="brand-mark">JA</div></div><h1>'+esc(route.t)+'</h1><span class="mvp-flag">MVP test build</span><span class="live" title="Screens update when stock changes"><i></i><span>Live</span></span>'+
+   '<button class="icon-btn" onclick="App.account()" aria-label="Account" style="display:none" id="tb-acc"></button></header>'+
+   '<main class="view" id="view"></main></div>'+
+   '<nav class="bottomnav">'+bn.map(k=>'<a href="#/'+k+'" class="'+(k===ROUTE?'on':'')+'">'+icon(ROUTES[k].i,22)+'<span>'+esc(ROUTES[k].s||ROUTES[k].t)+'</span>'+(k==='requests'&&oc?'<span class="count">'+oc+'</span>':'')+'</a>').join('')+
+   '<button onclick="App.more()" class="'+(bn.includes(ROUTE)?'':'on')+'">'+icon('more',22)+'<span>More</span></button></nav></div>'}
+function render(){
+  if(!ME){$('#app').innerHTML=vLogin();$('#login-u')&&!('ontouchstart' in window)&&$('#login-u').focus();return}
+  if(!allowed(ROUTE))ROUTE='dashboard';
+  $('#app').innerHTML=shell();$('#view').innerHTML=ROUTES[ROUTE].r();ROUTES[ROUTE].after&&ROUTES[ROUTE].after()}
+function refresh(){ME=currentUser();if(!ME){signOut(true);return}render()}
+window.addEventListener('hashchange',()=>{const k=(location.hash.replace(/^#\/?/,'')||'dashboard').split('?')[0];ROUTE=ROUTES[k]?k:'dashboard';closeModal();if(ME){render();window.scrollTo(0,0)}});
+window.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#modal-root').innerHTML)closeModal()});
+/* Live sync: another tab or window on this device changed data */
+window.addEventListener('storage',e=>{if(e.key!==STORE_KEY)return;reloadFromStore();if(!ME)return;ME=currentUser();if(!ME){signOut(true);return}
+  const busy=$('#modal-root').innerHTML||['stockin','returns'].includes(ROUTE);
+  if(busy){$$('.line').forEach(r=>r.querySelector('.ln-part').dispatchEvent(new Event('input')));toast('Stock figures updated by another user')}else{render();toast('Updated: another user changed stock')}});
+
+/* =========================================================================
+   8. VIEWS
+   ========================================================================= */
+function vLogin(){return'<div class="login"><section class="login-art"><div class="brand"><div class="brand-mark">JA</div><div class="brand-text"><div class="brand-name">JAIN AUTOMOBILES</div><div class="brand-sub">Authorised Royal Enfield Dealer · Hisar</div></div></div>'+
+  '<div><h2>Every part. Every bike. <em>Every hand it passed through.</em></h2><p style="margin-top:16px">One live stock register for GMA and spares. Know what is on the shelf, where each item went, and who issued it.</p></div>'+
+  '<div class="login-points"><div><b>Live</b>Same numbers at the counter and the stockroom</div><div><b>Traceable</b>Chassis, invoice and challan on every issue</div><div><b>Sheets ready</b>Every tab exports to Google Sheets</div></div></section>'+
+  '<section class="login-side"><form class="login-card" onsubmit="App.login(event)" autocomplete="on"><div class="mvp-flag" style="display:inline-block">MVP test build</div><h1>Sign in</h1><p class="muted" style="margin:0">Use the login your administrator gave you.</p>'+
+  '<label class="field">Username<input id="login-u" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>'+
+  '<label class="field">Password<div class="pw-wrap"><input id="login-p" name="password" type="password" autocomplete="current-password" required><button type="button" onclick="const i=$(\'#login-p\');i.type=i.type===\'password\'?\'text\':\'password\';this.textContent=i.type===\'password\'?\'Show\':\'Hide\'">Show</button></div></label>'+
+  '<div id="login-err" class="login-err hidden"></div><button class="btn primary" type="submit">Sign in</button>'+
+  '<div class="login-note">Test build: data is saved in this browser only. '+(STORAGE_OK?'':'<b style="color:var(--red)">This browser is blocking storage, so changes will be lost on refresh.</b>')+'</div></form></section></div>'}
+
+function vDashboard(){
+  const parts=activeParts(),bal=balances();let units=0,vp=0,vs=0;const low=[],out=[],over=[];
+  for(const p of parts){const q=bal[p.id]||0;if(q>0){units+=q;vp+=q*p.purchasePrice;vs+=q*p.sellingPrice}const s=statusOf(p,q);if(s==='out')out.push([p,q]);else if(s==='low')low.push([p,q]);else if(s==='over')over.push([p,q])}
+  const today=startOfDay(Date.now());const tm=DB.ledger.filter(r=>r.ts>=today);const issuedToday=tm.filter(r=>r.type==='ISSUE').reduce((a,r)=>a-r.qty,0);
+  const oc=openCount();const h=new Date().getHours();const greet=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
+  const cards=[['Active parts',fmtN(parts.length),fmtN(units)+' units on hand',''],can('see_value')?['Stock value (cost)',fmtINR(vp),fmtINR(vs)+' at selling price','gold']:null,
+    ['Low stock',low.length,'At or below minimum','amber'],['Out of stock',out.length,'Nothing on the shelf','red'],
+    ['Open requests',oc,DB.settings.approvalRequired?'Awaiting approval or issue':'Waiting to be issued',''],['Issued today',fmtN(issuedToday),tm.length+' movement(s) today','']].filter(Boolean);
+  const cats={};parts.forEach(p=>{const q=Math.max(bal[p.id]||0,0);cats[p.category]=(cats[p.category]||0)+q});const cmax=Math.max(1,...Object.values(cats));
+  const alerts=out.concat(low);
+  const recent=DB.ledger.slice(-9).reverse();
+  return'<div class="greet"><div><h2>'+greet+', '+esc(ME.name.split(' ')[0])+'</h2><p>'+new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' · '+esc(DB.settings.dealership)+', '+esc(DB.settings.branch)+'</p></div>'+
+   '<div class="quick">'+(can('request_create')?'<button class="btn primary" onclick="App.newRequest('+(can('issue')?'true':'false')+')">'+icon('plus',18)+(can('issue')?' Issue stock':' Request stock')+'</button>':'')+(can('stock_in')?'<a class="btn" href="#/stockin">'+icon('in',18)+' Stock in</a>':'')+'</div></div>'+
+   '<div class="panel" style="margin-bottom:18px;padding:14px"><form onsubmit="event.preventDefault();VS.inv.q=$(\'#dash-q\').value;location.hash=\'#/inventory\'" class="search" style="min-width:0">'+icon('search',18)+'<input id="dash-q" placeholder="Quick stock check: part code, name or bike model" enterkeyhint="search"></form></div>'+
+   '<div class="stats">'+cards.map(c=>'<div class="stat '+c[3]+'"><div class="l">'+c[0]+'</div><div class="v">'+c[1]+'</div><div class="s">'+c[2]+'</div></div>').join('')+'</div>'+
+   '<div class="grid g-main" style="margin-top:18px"><div class="stack">'+
+    '<section class="panel"><div class="panel-head"><h2>Needs attention</h2><a href="#/inventory" onclick="VS.inv.st=\'alert\'" class="sub">See all</a></div>'+
+     (alerts.length?alerts.slice(0,8).map(([p,q])=>{const s=statusOf(p,q);return'<div class="alert-row"><div class="feed-dot '+(s==='out'?'red':'amber')+'">'+icon('alert',18)+'</div><div class="grow"><div class="t1 strong">'+esc(p.name)+'</div><div class="sub">'+esc(p.partCode)+' · Rack '+esc(p.rack||'-')+' · min '+p.minQty+'</div></div><div class="num"><div class="qty" style="font-family:var(--f-display);font-size:22px;font-weight:700">'+q+'</div></div>'+stBadge(s)+'</div>'}).join(''):'<div class="empty">All parts are above their minimum level.</div>')+
+     (over.length?'<p class="hint" style="margin:12px 0 0">'+over.length+' part(s) are above their maximum level. See Reports, Movement analytics.</p>':'')+'</section>'+
+    '<section class="panel"><div class="panel-head"><h2>Stock by category</h2><span class="sub">units on hand</span></div>'+Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([c,v])=>'<div class="cat-row"><span>'+esc(c)+'</span><div class="track"><i style="width:'+(v/cmax*100).toFixed(1)+'%"></i></div><span class="num strong">'+v+'</span></div>').join('')+'</section>'+
+   '</div><section class="panel"><div class="panel-head"><h2>Recent activity</h2>'+(can('reports')?'<a href="#/ledger" class="sub">Full ledger</a>':'')+'</div><div class="feed">'+
+    recent.map(r=>{const m=MV[r.type];const dest=r.destinationName?' to '+r.destinationName:'';return'<div class="feed-item"><div class="feed-dot '+m[1]+'">'+icon(m[2],17)+'</div><div style="min-width:0"><div class="t1"><b>'+m[0]+'</b> '+qtyCell(r.qty)+' · '+esc(r.partName)+'</div><div class="t2">'+esc(r.partCode)+esc(r.type==='ISSUE'?dest:'')+(r.chassis?' · chassis '+esc(r.chassis):'')+(r.salesInvoice?' · inv '+esc(r.salesInvoice):'')+(r.supplierInvoice?' · RE inv '+esc(r.supplierInvoice):'')+'</div><div class="t2">'+esc(r.userName)+' · '+ago(r.ts)+'</div></div></div>'}).join('')+
+   '</div></section></div>'}
+
+function invRows(){const s=VS.inv,bal=balances(),q=s.q.trim().toLowerCase();
+  return activeParts().filter(p=>{const qty=bal[p.id]||0,st=statusOf(p,qty);
+    if(q&&!(p.partCode+' '+p.sku+' '+p.name+' '+p.category+' '+p.model+' '+p.rack).toLowerCase().includes(q))return false;
+    if(s.cat&&p.category!==s.cat)return false;if(s.model&&p.model!==s.model)return false;
+    if(s.st==='alert')return st==='out'||st==='low';if(s.st&&st!==s.st)return false;return true}).sort((a,b)=>a.partCode.localeCompare(b.partCode))}
+function invResults(){const rows=invRows(),bal=balances();
+  const cols=[{label:'Part code',html:p=>'<div class="code">'+esc(p.partCode)+'</div><div class="sub">'+esc(p.sku||'')+'</div>'},
+   {label:'Part',html:p=>'<div class="strong">'+esc(p.name)+'</div><div class="sub">'+esc(p.model)+'</div>'},
+   {label:'Category',k:'category'},{label:'Rack',k:'rack'},
+   {label:'In stock',num:true,html:p=>{const qty=bal[p.id]||0,st=statusOf(p,qty);const cap=Math.max(+p.maxQty||0,qty,1);return'<div class="qty">'+qty+'</div><div class="bar"><i class="'+st+'" style="width:'+Math.min(100,Math.max(qty,0)/cap*100).toFixed(0)+'%"></i></div><div class="sub">min '+p.minQty+(p.maxQty?' · max '+p.maxQty:'')+'</div>'}},
+   {label:'Status',html:p=>stBadge(statusOf(p,bal[p.id]||0))}];
+  if(can('see_value'))cols.push({label:'Selling price',num:true,html:p=>fmtINR(p.sellingPrice)});
+  cols.push({label:'',cls:'actions',html:p=>(can('stock_in')?'<button class="btn sm" onclick="event.stopPropagation();App.goStockIn(\''+p.id+'\')">'+icon('in',16)+' In</button> ':'')+(can('parts_edit')?'<button class="icon-btn" title="Edit part" aria-label="Edit part" onclick="event.stopPropagation();App.partForm(\''+p.id+'\')">'+icon('edit',18)+'</button>':'')});
+  return'<p class="sub" style="margin:0 0 10px">'+rows.length+' part(s)</p>'+tableHTML(cols,rows,{rowAttr:p=>'class="click" onclick="App.partDetail(\''+p.id+'\')"',empty:'No parts match your search.'})}
+function vInventory(){const s=VS.inv;const cats=[...new Set(activeParts().map(p=>p.category))].sort();const models=[...new Set(activeParts().map(p=>p.model))].sort();
+  return'<div class="toolbar"><div class="search">'+icon('search',18)+'<input id="inv-q" placeholder="Search part code, SKU, name, bike model or rack" value="'+esc(s.q)+'" oninput="App.invFilter()" enterkeyhint="search"></div>'+
+  '<select id="inv-cat" onchange="App.invFilter()"><option value="">Category</option>'+cats.map(c=>'<option '+(c===s.cat?'selected':'')+'>'+esc(c)+'</option>').join('')+'</select>'+
+  '<select id="inv-model" onchange="App.invFilter()"><option value="">Model</option>'+models.map(c=>'<option '+(c===s.model?'selected':'')+'>'+esc(c)+'</option>').join('')+'</select>'+
+  '<select id="inv-st" onchange="App.invFilter()"><option value="">Status</option>'+[['alert','Needs attention'],['out','Out of stock'],['low','Low stock'],['over','Overstocked'],['ok','In stock']].map(o=>'<option value="'+o[0]+'" '+(o[0]===s.st?'selected':'')+'>'+o[1]+'</option>').join('')+'</select>'+
+  (can('parts_edit')?'<button class="btn primary" onclick="App.partForm()">'+icon('plus',18)+' Add part</button>':'')+
+  (can('export')?'<button class="btn" onclick="App.exportTab(\'balances\')">'+icon('down',18)+' CSV</button>':'')+'</div><div id="inv-results">'+invResults()+'</div>'}
+
+function vStockIn(){const recent=DB.inwards.slice(-10).reverse();
+  return partsDatalist()+'<div class="grid g-main"><section class="panel"><h2>Receive stock</h2><p class="hint">Enter every line from one Royal Enfield GMA invoice. Stock updates for everyone the moment you save.</p>'+
+  '<form id="f-in" onsubmit="App.submitStockIn(event)"><div class="form-grid three"><label class="field">RE invoice number <span class="req">*</span><input name="invoiceNo" required placeholder="e.g. RE/GMA/26/52110" autocapitalize="characters"></label>'+
+  '<label class="field">Invoice date<input name="invoiceDate" type="date" value="'+stamp()+'"></label><label class="field">Supplier<input name="supplier" value="Royal Enfield (GMA)"></label></div>'+
+  linesEditor('in-lines')+'<label class="field" style="margin-top:14px">Remarks<textarea name="remarks" rows="2" placeholder="Optional"></textarea></label>'+
+  '<div class="form-foot"><span class="sub">Recorded against your name: '+esc(ME.name)+'</span><button class="btn primary" type="submit">'+icon('check',18)+' Save stock in</button></div></form></section>'+
+  '<section class="panel"><div class="panel-head"><h2>Recent inward entries</h2></div>'+(recent.length?recent.map(w=>'<div class="alert-row"><div class="feed-dot green">'+icon('in',17)+'</div><div class="grow"><div class="t1 strong">'+esc(w.invoiceNo)+'</div><div class="sub">'+esc(w.no)+' · '+fmtD(w.ts)+' · '+esc(w.userName)+'</div></div><div class="num"><b>'+sum(w.lines,'qty')+'</b><div class="sub">'+w.lines.length+' line(s)</div></div></div>').join(''):'<div class="empty">No stock received yet.</div>')+'</section></div>'}
+function afterStockIn(){const pf=VS.prefill;VS.prefill=null;if(pf){const p=partById(pf);App.addLine('in-lines',p?p.partCode+' · '+p.name:'')}else App.addLine('in-lines');App.addLine('in-lines');App.addLine('in-lines')}
+
+function reqFilter(){const t=VS.req.tab;let rs=DB.requests.slice().reverse();
+  if(ME.role==='sales_rep'||VS.req.mine)rs=rs.filter(r=>r.requestedById===ME.id||r.createdById===ME.id);
+  const f={open:r=>['Requested','Approved','Partially issued'].includes(r.status),ready:r=>isIssuable(r),done:r=>['Issued','Closed short'].includes(r.status),closed:r=>['Rejected','Cancelled'].includes(r.status),all:()=>true};
+  return{rs,f}}
+function vRequests(){const {rs,f}=reqFilter();const t=VS.req.tab;const tabs=[['open','Open'],['ready','Ready to issue'],['done','Issued'],['closed','Rejected / cancelled'],['all','All']];
+  const list=rs.filter(f[t]);
+  const cols=[{label:'Request',html:r=>'<div class="code">'+esc(r.no)+'</div><div class="sub">'+fmtDT(r.ts)+'</div>'},
+   {label:'Going to',html:r=>'<div class="strong">'+esc(r.destinationName)+'</div><div class="sub">'+esc([r.chassis?'Chassis '+r.chassis:'',r.model,r.salesInvoice?'Inv '+r.salesInvoice:''].filter(Boolean).join(' · ')||DEST_TYPES[r.destType])+'</div>'},
+   {label:'Parts',html:r=>'<div>'+r.items.map(i=>esc(i.partCode)+' × '+i.qty).join('<br>')+'</div>'},
+   {label:'Issued',num:true,html:r=>sum(r.items,'issued')+' / '+sum(r.items,'qty')},
+   {label:'Requested by',html:r=>esc(r.requestedByName)},{label:'Status',html:r=>reqBadge(r.status)},
+   {label:'',cls:'actions',html:r=>(isIssuable(r)&&can('issue')?'<button class="btn sm primary" onclick="event.stopPropagation();App.reqDetail(\''+r.id+'\')">Issue</button>':(r.status==='Requested'&&DB.settings.approvalRequired&&can('request_approve')?'<button class="btn sm primary" onclick="event.stopPropagation();App.reqDetail(\''+r.id+'\')">Review</button>':'<button class="btn sm" onclick="event.stopPropagation();App.reqDetail(\''+r.id+'\')">View</button>'))}];
+  return'<div class="toolbar"><div class="tabs">'+tabs.map(x=>'<button class="'+(x[0]===t?'on':'')+'" onclick="App.reqTab(\''+x[0]+'\')">'+x[1]+'<span class="n">'+rs.filter(f[x[0]]).length+'</span></button>').join('')+'</div><div style="flex:1"></div>'+
+   (ME.role!=='sales_rep'?'<label class="check" style="padding:0"><input type="checkbox" '+(VS.req.mine?'checked':'')+' onchange="App.reqMine(this.checked)"> Only mine</label>':'')+
+   (can('request_create')?'<button class="btn '+(can('issue')?'':'primary')+'" onclick="App.newRequest(false)">'+icon('plus',18)+' New request</button>':'')+
+   (can('issue')&&can('request_create')?'<button class="btn primary" onclick="App.newRequest(true)">'+icon('out',18)+' Issue now</button>':'')+'</div>'+
+   (DB.settings.approvalRequired?'<p class="hint">Approval is switched on: a manager must approve each request before the store can issue it.</p>':'<p class="hint">Approval is switched off: the store can issue any new request straight away. Change this in Settings.</p>')+
+   tableHTML(cols,list,{rowAttr:r=>'class="click" onclick="App.reqDetail(\''+r.id+'\')"',empty:'No requests here.'})}
+
+function vChallans(){const list=DB.challans.slice().reverse();
+  const cols=[{label:'Challan',html:c=>'<div class="code">'+esc(c.no)+'</div><div class="sub">'+fmtDT(c.ts)+'</div>'},
+   {label:'Destination',html:c=>'<div class="strong">'+esc(c.destinationName)+'</div><div class="sub">'+esc([c.chassis?'Chassis '+c.chassis:'',c.model,c.salesInvoice?'Inv '+c.salesInvoice:''].filter(Boolean).join(' · '))+'</div>'},
+   {label:'Parts',html:c=>c.items.map(i=>esc(i.partCode)+' × '+i.qty).join('<br>')},{label:'Units',num:true,html:c=>sum(c.items,'qty')},
+   {label:'Requested by',html:c=>esc(c.requestedByName)},{label:'Issued by',html:c=>esc(c.issuedByName)},
+   {label:'Returned',html:c=>{const back=c.items.reduce((a,i)=>a+(i.qty-challanReturnable(c.no,i.partId)),0);return back>0?badge(back+' back','blue'):'<span class="sub">-</span>'}},
+   {label:'',cls:'actions',html:c=>'<button class="btn sm" onclick="event.stopPropagation();App.challan(\''+esc(c.no)+'\')">'+icon('doc',16)+' Open</button>'}];
+  return'<div class="toolbar"><p class="hint" style="margin:0;flex:1">A challan is created automatically every time stock leaves the warehouse. Open one to print or save it as PDF.</p>'+(can('export')?'<button class="btn" onclick="App.exportTab(\'challans\')">'+icon('down',18)+' CSV</button>':'')+'</div>'+
+   tableHTML(cols,list,{rowAttr:c=>'class="click" onclick="App.challan(\''+esc(c.no)+'\')"',empty:'No challans yet.'})}
+
+function vReturns(){const t=VS.ret;const tabs=[];if(can('return'))tabs.push(['return','Return to warehouse']);if(can('adjust'))tabs.push(['adjust','Stock adjustment']);
+  const cur=tabs.find(x=>x[0]===t)?t:tabs[0][0];VS.ret=cur;
+  const recent=DB.ledger.filter(r=>r.type==='RETURN'||r.type==='ADJUST'||r.type==='REVERSAL').slice(-12).reverse();
+  let form='';
+  if(cur==='return'){const chs=DB.challans.slice().reverse().filter(c=>c.items.some(i=>challanReturnable(c.no,i.partId)>0)).slice(0,300);
+    const dests=DB.destinations.filter(d=>Object.values(holdings()[d.id]||{}).some(q=>q>0));
+    form='<h2>Return to warehouse</h2><p class="hint">Stock coming back from a customer bike, a display or offsite storage. It goes back on the shelf, or is written off if damaged.</p>'+
+    '<form id="f-rtn" onsubmit="App.submitReturn(event)"><div class="form-grid"><label class="field">Return against<select name="mode" id="rtn-mode" onchange="App.rtnLoad()"><option value="challan">A delivery challan</option><option value="destination">A destination (display, offsite)</option></select></label>'+
+    '<label class="field" id="rtn-ch-wrap">Challan<select name="challanNo" id="rtn-ch" onchange="App.rtnLoad()"><option value="">Select challan</option>'+chs.map(c=>'<option value="'+esc(c.no)+'">'+esc(c.no)+' · '+esc(c.destinationName)+(c.chassis?' · '+esc(c.chassis):'')+(c.salesInvoice?' · '+esc(c.salesInvoice):'')+'</option>').join('')+'</select></label>'+
+    '<label class="field hidden" id="rtn-ds-wrap">Destination<select name="destinationId" id="rtn-ds" onchange="App.rtnLoad()"><option value="">Select destination</option>'+dests.map(d=>'<option value="'+d.id+'">'+esc(d.name)+'</option>').join('')+'</select></label>'+
+    '<label class="field">Condition<select name="condition"><option value="good">Good: back on the shelf</option><option value="damaged">Damaged: write off</option></select></label>'+
+    '<label class="field">Reason <span class="req">*</span><input name="remarks" placeholder="e.g. Customer changed mind, display refreshed"></label></div>'+
+    '<div id="rtn-items" style="margin-top:16px"><div class="empty">Choose a challan or destination to see what can be returned.</div></div>'+
+    '<div class="form-foot"><span class="sub">A return line is added to the ledger. Nothing is edited or deleted.</span><button class="btn primary" type="submit">'+icon('undo',18)+' Record return</button></div></form>'}
+  else{form=partsDatalist()+'<h2>Stock adjustment</h2><p class="hint">Use only when a physical count differs from the system, or stock is damaged, lost or found. Every adjustment needs a reason and is visible in the audit log.</p>'+
+    '<form id="f-adj" onsubmit="App.submitAdjust(event)"><div class="form-grid"><label class="field span-2">Part <span class="req">*</span><input list="dl-parts" name="part" id="adj-part" placeholder="Type part code or name" oninput="App.adjInfo()" autocomplete="off"><span class="sub" id="adj-info"></span></label>'+
+    '<label class="field">Direction<select name="dir"><option value="-1">Remove from stock</option><option value="1">Add to stock</option></select></label>'+
+    '<label class="field">Quantity <span class="req">*</span><input name="qty" type="number" min="1" step="1" inputmode="numeric"></label>'+
+    '<label class="field">Reason<select name="reason">'+ADJ_REASONS.map(r=>'<option>'+r+'</option>').join('')+'</select></label>'+
+    '<label class="field">Remarks <span class="req">*</span><input name="remarks" placeholder="What happened?"></label></div>'+
+    '<div class="form-foot"><span class="sub">For a wrong entry, use Reverse in the Stock Ledger instead.</span><button class="btn primary" type="submit">'+icon('check',18)+' Save adjustment</button></div></form>'}
+  return(tabs.length>1?'<div class="toolbar"><div class="tabs">'+tabs.map(x=>'<button class="'+(x[0]===cur?'on':'')+'" onclick="App.retTab(\''+x[0]+'\')">'+x[1]+'</button>').join('')+'</div></div>':'')+
+   '<div class="grid g-main"><section class="panel">'+form+'</section><section class="panel"><div class="panel-head"><h2>Recent returns and corrections</h2></div>'+
+   (recent.length?recent.map(r=>'<div class="alert-row"><div class="feed-dot '+MV[r.type][1]+'">'+icon(MV[r.type][2],17)+'</div><div class="grow"><div class="t1"><b>'+MV[r.type][0]+'</b> '+qtyCell(r.qty)+' · '+esc(r.partName)+'</div><div class="sub">'+esc(r.reason||'')+(r.remarks?' · '+esc(r.remarks):'')+'</div><div class="sub">'+esc(r.userName)+' · '+fmtDT(r.ts)+'</div></div></div>').join(''):'<div class="empty">Nothing yet.</div>')+'</section></div>'}
+function afterReturns(){}
+
+function vDestinations(){const h=holdings();const q=VS.chassisQ.trim().toUpperCase();
+  let chassisBlock='';
+  if(q){const rows=DB.ledger.filter(r=>r.chassis&&r.chassis.toUpperCase().includes(q)&&['ISSUE','RETURN','REVERSAL'].includes(r.type)).sort((a,b)=>a.chassis.localeCompare(b.chassis)||a.ts-b.ts);
+    const byC={};rows.forEach(r=>{(byC[r.chassis]=byC[r.chassis]||[]).push(r)});
+    chassisBlock=Object.keys(byC).length?Object.entries(byC).map(([c,rs])=>{const net={};rs.forEach(r=>{net[r.partId]=(net[r.partId]||0)-r.qty});const fitted=Object.entries(net).filter(x=>x[1]>0);
+      return'<div class="panel" style="margin-bottom:14px"><div class="panel-head"><div><h2>Chassis '+esc(c)+'</h2><span class="sub">'+esc(rs.find(r=>r.model)?.model||'Model not recorded')+' · '+fitted.reduce((a,x)=>a+x[1],0)+' unit(s) fitted</span></div></div>'+
+      tableHTML([{label:'Date',html:r=>fmtDT(r.ts)},{label:'Type',html:r=>mvBadge(r.type)},{label:'Part',html:r=>'<b>'+esc(r.partCode)+'</b> '+esc(r.partName)},{label:'Qty',num:true,html:r=>String(-r.qty)},
+       {label:'Challan',html:r=>esc(r.challanNo||'-')},{label:'Requested by',html:r=>esc(r.requestedBy||'-')},{label:'Issued / by',html:r=>esc(r.issuedBy||r.userName)}],rs)+'</div>'}).join(''):'<div class="empty" style="margin-bottom:18px">No parts found for chassis containing "'+esc(q)+'".</div>'}
+  const dests=DB.destinations.filter(d=>d.active!==false);
+  return'<section class="panel" style="margin-bottom:18px"><h2>Chassis lookup</h2><p class="hint">Every part ever fitted to a bike. Enter the full chassis number or just the last 4.</p>'+
+   '<form class="toolbar" style="margin:0" onsubmit="event.preventDefault();VS.chassisQ=$(\'#ch-q\').value;render()"><div class="search">'+icon('bike',18)+'<input id="ch-q" value="'+esc(VS.chassisQ)+'" placeholder="e.g. 8F21" autocapitalize="characters" enterkeyhint="search"></div><button class="btn primary" type="submit">Find</button>'+(q?'<button class="btn ghost" type="button" onclick="VS.chassisQ=\'\';render()">Clear</button>':'')+'</form></section>'+chassisBlock+
+   '<div class="panel-head"><h2>Destinations</h2>'+(can('destinations_edit')?'<button class="btn" onclick="App.destForm()">'+icon('plus',18)+' Add destination</button>':'')+'</div>'+
+   '<p class="hint">Displays, display bikes and offsite storage are not warehouses. Stock issued to them is shown here as "currently held" until it is returned.</p>'+
+   '<div class="cards">'+dests.map(d=>{const hold=h[d.id]||{};const units=Object.values(hold).reduce((a,b)=>a+Math.max(b,0),0);const lines=Object.values(hold).filter(x=>x>0).length;const isSale=['customer_vehicle','counter_sale'].includes(d.type);
+    return'<div class="card" onclick="App.destDetail(\''+d.id+'\')"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><h3>'+esc(d.name)+'</h3>'+badge(DEST_TYPES[d.type],isSale?'green':d.type==='display'?'gold':'blue')+'</div>'+
+    '<p>'+(isSale?'Stock fitted or sold to customers.':'Stock currently sitting here, issued from the warehouse.')+'</p><div class="foot"><div><div class="big-num">'+units+'</div><div class="sub">'+(isSale?'units issued, net of returns':'units held · '+lines+' part(s)')+'</div></div>'+icon('pin',22)+'</div></div>'}).join('')+'</div>'}
+
+function ledgerRows(){const s=VS.led,q=s.q.trim().toLowerCase();const from=s.from?startOfDay(new Date(s.from).getTime()):0,to=s.to?startOfDay(new Date(s.to).getTime())+DAY:Infinity;
+  return DB.ledger.filter(r=>{if(s.type&&r.type!==s.type)return false;if(r.ts<from||r.ts>=to)return false;
+    if(q&&!([r.partCode,r.partName,r.chassis,r.salesInvoice,r.supplierInvoice,r.challanNo,r.requestNo,r.userName,r.destinationName,r.requestedBy,r.remarks].join(' ').toLowerCase().includes(q)))return false;return true}).reverse()}
+function ledgerResults(){const all=ledgerRows();const rows=all.slice(0,300);const rv=reversedSet();
+  const cols=[{label:'When',html:r=>'<div>'+fmtDT(r.ts)+'</div>'},{label:'Type',html:r=>mvBadge(r.type)+(rv.has(r.id)?' '+badge('Reversed','red'):'')},
+   {label:'Part',html:r=>'<div class="code">'+esc(r.partCode)+'</div><div class="sub">'+esc(r.partName)+'</div>'},
+   {label:'Qty',num:true,html:r=>qtyCell(r.qty)},{label:'Stock',num:true,html:r=>'<span class="sub">'+r.before+' → </span><b>'+r.after+'</b>'},
+   {label:'Reference',html:r=>refCell(r)},{label:'By',html:r=>esc(r.userName)+(r.requestedBy&&r.type==='ISSUE'?'<div class="sub">for '+esc(r.requestedBy)+'</div>':'')},
+   {label:'Remarks',html:r=>'<span class="sub">'+esc(r.remarks||'-')+'</span>'}];
+  if(can('reverse'))cols.push({label:'',cls:'actions',html:r=>(r.type!=='REVERSAL'&&!rv.has(r.id))?'<button class="btn sm ghost" onclick="App.reverse(\''+r.id+'\')">Reverse</button>':''});
+  return'<p class="sub" style="margin:0 0 10px">'+all.length+' entr'+(all.length===1?'y':'ies')+(all.length>300?', showing latest 300 (export CSV for all)':'')+'</p>'+tableHTML(cols,rows,{empty:'No ledger entries match.'})}
+function vLedger(){const s=VS.led;
+  return'<div class="toolbar"><div class="search">'+icon('search',18)+'<input id="led-q" placeholder="Search part, chassis, invoice, challan or person" value="'+esc(s.q)+'" oninput="App.ledFilter()"></div>'+
+  '<select id="led-type" onchange="App.ledFilter()"><option value="">All types</option>'+Object.keys(MV).map(k=>'<option value="'+k+'" '+(k===s.type?'selected':'')+'>'+MV[k][0]+'</option>').join('')+'</select>'+
+  '<input type="date" id="led-from" value="'+s.from+'" onchange="App.ledFilter()" aria-label="From date"><input type="date" id="led-to" value="'+s.to+'" onchange="App.ledFilter()" aria-label="To date">'+
+  (can('export')?'<button class="btn" onclick="App.exportTab(\'ledger\')">'+icon('down',18)+' CSV</button>':'')+'</div>'+
+  '<p class="hint">Every stock change is a permanent line here. Mistakes are fixed with a reversal line, never by editing or deleting.</p><div id="led-results">'+ledgerResults()+'</div>'}
+
+/* ---------- Reports ---------- */
+function analytics(){const t=Date.now(),bal=balances();const d30=t-30*DAY,d60=t-60*DAY,d90=t-90*DAY;
+  const rows=activeParts().map(p=>{let o30=0,o90=0,last=0;for(const r of DB.ledger){if(r.partId!==p.id||r.type!=='ISSUE')continue;const q=-r.qty;if(r.ts>=d30)o30+=q;if(r.ts>=d90)o90+=q;if(r.ts>last)last=r.ts}
+    const qty=bal[p.id]||0;const daily=o90/90;const cover=daily>0?Math.round(qty/daily):null;return{p,qty,o30,o90,last,daily,cover}});
+  const moving=rows.filter(r=>r.o30>0).map(r=>r.o30).sort((a,b)=>b-a);const fastCut=Math.max(2,moving[Math.floor(moving.length/4)]||2);
+  rows.forEach(r=>{const p=r.p;let cls;if(r.qty>0&&(!r.last||r.last<d60))cls='Dead stock';else if(r.o30>=fastCut)cls='Fast moving';else if(r.o90>0)cls='Slow moving';else cls='No movement';
+    r.cls=cls;r.over=+p.maxQty>0&&r.qty>+p.maxQty;let target=Math.max(p.minQty*2,Math.ceil(r.daily*45));if(+p.maxQty)target=Math.min(target,+p.maxQty);r.reorder=Math.max(0,target-r.qty);
+    r.action=cls==='Dead stock'?'Consider discount or return to RE':r.over?'Hold purchases, run an offer':r.qty<=p.minQty?'Reorder now':r.reorder>0&&cls==='Fast moving'?'Plan reorder':'-'});
+  return rows}
+const REPORTS=[
+ {id:'stock',t:'Current stock',d:'Live quantity, status and value for every active part.',run(){const bal=balances();return{cols:[{label:'Part code',k:'partCode'},{label:'Name',k:'name'},{label:'Category',k:'category'},{label:'Model',k:'model'},{label:'Rack',k:'rack'},
+   {label:'Qty',k:'qty',num:true},{label:'Min',k:'minQty',num:true},{label:'Max',k:'maxQty',num:true},{label:'Status',k:'status'}].concat(can('see_value')?[{label:'Cost value',k:'cv',num:true,fmt:v=>fmtINR(v),csv:r=>r.cv},{label:'Selling value',k:'sv',num:true,fmt:v=>fmtINR(v),csv:r=>r.sv}]:[]),
+   rows:activeParts().map(p=>{const q=bal[p.id]||0;return Object.assign({},p,{qty:q,status:STATUS_L[statusOf(p,q)][0],cv:Math.max(q,0)*p.purchasePrice,sv:Math.max(q,0)*p.sellingPrice})}).sort((a,b)=>a.partCode.localeCompare(b.partCode))}}},
+ {id:'low',t:'Low and out of stock',d:'Parts at or below their minimum level, with a suggested order quantity.',run(){const a=analytics().filter(r=>r.qty<=r.p.minQty);return{cols:[{label:'Part code',html:r=>esc(r.p.partCode),csv:r=>r.p.partCode},{label:'Name',html:r=>esc(r.p.name),csv:r=>r.p.name},{label:'Rack',html:r=>esc(r.p.rack),csv:r=>r.p.rack},{label:'Qty',k:'qty',num:true},{label:'Min',num:true,html:r=>r.p.minQty,csv:r=>r.p.minQty},{label:'Issued last 30 days',k:'o30',num:true},{label:'Suggested order',k:'reorder',num:true}],rows:a}}},
+ {id:'movement',t:'Part movement',d:'Opening, received, issued, returned, adjusted and closing stock for a period.',filters:'range',run(f){const from=startOfDay(new Date(f.from).getTime()),to=startOfDay(new Date(f.to).getTime())+DAY;
+   const rows=activeParts().map(p=>{let op=0,inn=0,iss=0,ret=0,adj=0;for(const r of DB.ledger){if(r.partId!==p.id)continue;if(r.ts<from){op+=r.qty;continue}if(r.ts>=to)continue;
+     if(r.type==='IN'||r.type==='OPENING')inn+=r.qty;else if(r.type==='ISSUE')iss-=r.qty;else if(r.type==='RETURN')ret+=r.qty;else adj+=r.qty}
+     return{partCode:p.partCode,name:p.name,op,inn,iss,ret,adj,cl:op+inn-iss+ret+adj}}).filter(r=>r.op||r.inn||r.iss||r.ret||r.adj||r.cl);
+   return{cols:[{label:'Part code',k:'partCode'},{label:'Name',k:'name'},{label:'Opening',k:'op',num:true},{label:'Received',k:'inn',num:true},{label:'Issued',k:'iss',num:true},{label:'Returned',k:'ret',num:true},{label:'Adjusted',k:'adj',num:true},{label:'Closing',k:'cl',num:true}],rows}}},
+ {id:'chassis',t:'Bike / chassis usage',d:'All parts fitted to each bike, with dates and the people involved.',filters:'chassis',run(f){const q=(f.chassis||'').trim().toUpperCase();
+   const rows=DB.ledger.filter(r=>r.chassis&&['ISSUE','RETURN','REVERSAL'].includes(r.type)&&(!q||r.chassis.toUpperCase().includes(q))).sort((a,b)=>a.chassis.localeCompare(b.chassis)||a.ts-b.ts);
+   return{cols:[{label:'Chassis',k:'chassis'},{label:'Model',k:'model'},{label:'Date',k:'ts',fmt:v=>fmtDT(v)},{label:'Type',k:'type',fmt:v=>MV[v][0]},{label:'Part code',k:'partCode'},{label:'Part',k:'partName'},{label:'Qty',num:true,k:'qty',fmt:v=>String(-v)},{label:'Challan',k:'challanNo'},{label:'Requested by',k:'requestedBy'},{label:'Issued by',k:'userName'}],rows}}},
+ {id:'invoice',t:'Invoice-wise (no chassis)',d:'Parts sold against a sales invoice without a chassis number.',run(){const rows=DB.ledger.filter(r=>r.type==='ISSUE'&&r.salesInvoice&&!r.chassis).reverse();
+   return{cols:[{label:'Sales invoice',k:'salesInvoice'},{label:'Date',k:'ts',fmt:v=>fmtDT(v)},{label:'Part code',k:'partCode'},{label:'Part',k:'partName'},{label:'Qty',num:true,k:'qty',fmt:v=>String(-v)},{label:'Challan',k:'challanNo'},{label:'Requested by',k:'requestedBy'},{label:'Issued by',k:'userName'}],rows}}},
+ {id:'employee',t:'Employee-wise',d:'Requests raised, stock issued and stock received by each person.',run(){const rows=DB.users.filter(u=>!u.deleted).map(u=>{const reqs=DB.requests.filter(r=>r.requestedById===u.id);
+   let issued=0,received=0,adj=0;for(const r of DB.ledger){if(r.userId!==u.id)continue;if(r.type==='ISSUE')issued-=r.qty;if(r.type==='IN')received+=r.qty;if(r.type==='ADJUST'||r.type==='REVERSAL')adj++}
+   return{name:u.name,role:ROLES[u.role].label,req:reqs.length,reqUnits:reqs.reduce((a,r)=>a+sum(r.items,'issued'),0),issued,received,adj}}).filter(r=>r.req||r.issued||r.received||r.adj);
+   return{cols:[{label:'Person',k:'name'},{label:'Role',k:'role'},{label:'Requests raised',k:'req',num:true},{label:'Units issued for their requests',k:'reqUnits',num:true},{label:'Units issued (as store)',k:'issued',num:true},{label:'Units received',k:'received',num:true},{label:'Adjustments / reversals',k:'adj',num:true}],rows}}},
+ {id:'destination',t:'Destination-wise',d:'Stock issued to each destination, returned, and still held.',run(){const rows=DB.destinations.map(d=>{let iss=0,ret=0,last=0,ch=new Set();for(const r of DB.ledger){if(r.destinationId!==d.id)continue;if(r.type==='ISSUE'){iss-=r.qty;last=Math.max(last,r.ts);ch.add(r.challanNo)}else if(r.type==='RETURN')ret+=r.qty}
+   const held=Object.values(holdings()[d.id]||{}).reduce((a,b)=>a+Math.max(b,0),0);return{name:d.name,type:DEST_TYPES[d.type],iss,ret,held,ch:ch.size,last}});
+   return{cols:[{label:'Destination',k:'name'},{label:'Type',k:'type'},{label:'Units issued',k:'iss',num:true},{label:'Units returned',k:'ret',num:true},{label:'Net held / fitted',k:'held',num:true},{label:'Challans',k:'ch',num:true},{label:'Last issue',k:'last',fmt:v=>v?fmtD(v):'-'}],rows}}},
+ {id:'analytics',t:'Movement analytics',d:'Fast, slow and dead stock, overstock, discount candidates and suggested reorder.',run(){const rows=analytics().sort((a,b)=>['Fast moving','Slow moving','No movement','Dead stock'].indexOf(a.cls)-['Fast moving','Slow moving','No movement','Dead stock'].indexOf(b.cls)||b.o30-a.o30);
+   return{cols:[{label:'Part code',html:r=>esc(r.p.partCode),csv:r=>r.p.partCode},{label:'Name',html:r=>esc(r.p.name),csv:r=>r.p.name},{label:'Class',html:r=>badge(r.cls,{'Fast moving':'green','Slow moving':'amber','Dead stock':'red','No movement':'muted'}[r.cls])+(r.over?' '+badge('Overstock','blue'):''),csv:r=>r.cls+(r.over?' / Overstock':'')},
+     {label:'In stock',k:'qty',num:true},{label:'Issued 30 d',k:'o30',num:true},{label:'Issued 90 d',k:'o90',num:true},{label:'Last issued',k:'last',fmt:v=>v?fmtD(v):'Never'},{label:'Days of cover',num:true,html:r=>r.cover==null?'-':String(r.cover),csv:r=>r.cover==null?'':r.cover},{label:'Suggested order',k:'reorder',num:true},{label:'Action',k:'action'}],rows}}},
+ {id:'inward',t:'Purchase records (RE invoices)',d:'Every stock-in line against its Royal Enfield invoice.',run(){const rows=DB.ledger.filter(r=>r.type==='IN').reverse().map(r=>{const p=partById(r.partId)||{};return Object.assign({},r,{cost:r.qty*(p.purchasePrice||0)})});
+   return{cols:[{label:'Date',k:'ts',fmt:v=>fmtDT(v)},{label:'RE invoice',k:'supplierInvoice'},{label:'GRN',k:'grnNo'},{label:'Part code',k:'partCode'},{label:'Part',k:'partName'},{label:'Qty',k:'qty',num:true}].concat(can('see_value')?[{label:'Cost value',k:'cost',num:true,fmt:v=>fmtINR(v),csv:r=>r.cost}]:[]).concat([{label:'Entered by',k:'userName'}]),rows}}}
+];
+function vReports(){if(VS.rep){const R=REPORTS.find(r=>r.id===VS.rep);const f=VS.repF;
+   if(R.filters==='range'){f.from=f.from||isoDate(Date.now()-29*DAY);f.to=f.to||stamp()}
+   const out=R.run(f);
+   const flt=R.filters==='range'?'<label class="field" style="flex-direction:row;align-items:center;gap:8px">From<input type="date" id="rf-from" value="'+f.from+'" onchange="App.repF()"></label><label class="field" style="flex-direction:row;align-items:center;gap:8px">To<input type="date" id="rf-to" value="'+f.to+'" onchange="App.repF()"></label>':
+     R.filters==='chassis'?'<div class="search">'+icon('bike',18)+'<input id="rf-ch" placeholder="Filter by chassis (optional)" value="'+esc(f.chassis||'')+'" onchange="App.repF()"></div>':'';
+   return'<div class="toolbar"><button class="btn ghost" onclick="VS.rep=null;render()">← All reports</button><h2 style="flex:1;font-size:22px">'+esc(R.t)+'</h2>'+flt+(can('export')?'<button class="btn primary" onclick="App.repCSV()">'+icon('sheet',18)+' Download CSV</button>':'')+'</div><p class="hint">'+esc(R.d)+' '+out.rows.length+' row(s).</p>'+tableHTML(out.cols,out.rows,{empty:'No data for this report yet.'})}
+  return'<p class="hint">Every report opens on screen and downloads as a CSV that opens directly in Google Sheets or Excel.</p><div class="cards">'+REPORTS.map(r=>'<div class="card" onclick="App.openReport(\''+r.id+'\')"><h3>'+esc(r.t)+'</h3><p>'+esc(r.d)+'</p><div class="foot"><span class="sub">Open report</span>'+icon('chart',20)+'</div></div>').join('')+'</div>'}
+
+function vUsers(){const list=DB.users.filter(u=>!u.deleted);
+  const cols=[{label:'Name',html:u=>'<div style="display:flex;gap:10px;align-items:center"><div class="avatar">'+esc(initials(u.name))+'</div><div><div class="strong">'+esc(u.name)+(u.id===ME.id?' <span class="sub">(you)</span>':'')+'</div><div class="sub">@'+esc(u.username)+'</div></div></div>'},
+   {label:'Role',html:u=>esc(ROLES[u.role].label)},{label:'Status',html:u=>u.active?badge('Active','green'):badge('Deactivated','muted')},{label:'Last sign-in',html:u=>u.lastLogin?fmtDT(u.lastLogin):'<span class="sub">Never</span>'},
+   {label:'',cls:'actions',html:u=>'<button class="btn sm" onclick="App.userForm(\''+u.id+'\')">'+icon('edit',16)+' Edit</button> <button class="btn sm ghost" onclick="App.resetPw(\''+u.id+'\')">'+icon('key',16)+' Reset password</button>'}];
+  return'<div class="toolbar"><p class="hint" style="margin:0;flex:1">Accounts are created here by the Owner or Super Admin. Nobody can sign up on their own. Removing a user keeps all their history.</p><button class="btn primary" onclick="App.userForm()">'+icon('plus',18)+' Add user</button></div>'+tableHTML(cols,list)+
+  '<div class="section-title">What each role can do</div>'+permMatrix()}
+function permMatrix(){const roles=Object.keys(ROLES);return'<div class="table-wrap"><table class="t" style="min-width:900px"><thead><tr><th>Permission</th>'+roles.map(r=>'<th style="text-align:center">'+esc(ROLES[r].label)+'</th>').join('')+'</tr></thead><tbody>'+
+  Object.entries(PERMS).map(([k,l])=>'<tr><td>'+esc(l)+'</td>'+roles.map(r=>'<td style="text-align:center">'+(hasPerm({role:r},k)?'<span style="color:var(--green)">'+icon('check',18).replace('class="ic"','class="ic" style="margin:auto"')+'</span>':'<span class="muted">·</span>')+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'}
+
+function vAudit(){const q=VS.aud.trim().toLowerCase();const rows=DB.audit.slice().reverse().filter(a=>!q||(a.userName+' '+a.action+' '+a.detail+' '+a.role).toLowerCase().includes(q)).slice(0,400);
+  return'<div class="toolbar"><div class="search">'+icon('search',18)+'<input id="aud-q" placeholder="Search person, action or detail" value="'+esc(VS.aud)+'" onchange="VS.aud=this.value;render()"></div><button class="btn" onclick="App.exportTab(\'audit\')">'+icon('down',18)+' CSV</button></div>'+
+  '<p class="hint">Every sign-in and every change, with who did it and when. Entries cannot be edited or deleted from the app.</p>'+
+  tableHTML([{label:'When',html:a=>fmtDT(a.ts)},{label:'Person',html:a=>'<div class="strong">'+esc(a.userName)+'</div><div class="sub">'+esc(a.role)+'</div>'},{label:'Action',html:a=>badge(a.action,/fail|block|denied|revers|removed|deactiv/i.test(a.action)?'red':/sign/i.test(a.action)?'muted':'gold')},{label:'Detail',html:a=>'<span class="sub">'+esc(a.detail)+'</span>'}],rows)}
+
+function vSettings(){const S=DB.settings;const n=k=>(DB[k]||[]).length;
+  return'<div class="grid g-2"><section class="panel"><h2>Workflow rules</h2><p class="hint">These change how every user works. Changes are logged.</p><form onsubmit="App.saveSettings(event)">'+
+  '<label class="check"><input type="checkbox" name="approvalRequired" '+(S.approvalRequired?'checked':'')+'> Requests need manager approval before issue</label>'+
+  '<label class="check"><input type="checkbox" name="allowNegative" '+(S.allowNegative?'checked':'')+'> Allow stock to go below zero (not recommended)</label>'+
+  '<div class="form-grid" style="margin-top:10px"><label class="field">Dealership name<input name="dealership" value="'+esc(S.dealership)+'"></label><label class="field">Branch<input name="branch" value="'+esc(S.branch)+'"></label>'+
+  '<label class="field">Dealer code<input name="dealerCode" value="'+esc(S.dealerCode)+'"></label><label class="field">Sign-in lasts (hours)<input name="sessionHours" type="number" min="1" max="24" value="'+S.sessionHours+'"></label></div>'+
+  '<div class="form-foot"><span></span><button class="btn primary">Save settings</button></div></form></section>'+
+  '<section class="panel"><h2>Google Sheets</h2><p class="hint">Each tab below downloads as a CSV. In Google Sheets choose File, Import, Upload, then "Insert new sheet". Together they rebuild the full workbook.</p>'+
+  '<div style="display:flex;flex-wrap:wrap;gap:8px">'+SHEET_TABS.map(t=>'<button class="btn sm" onclick="App.exportTab(\''+t[0]+'\')">'+icon('sheet',16)+' '+t[1]+'</button>').join('')+'</div>'+
+  '<div class="form-foot"><span class="sub">'+n('parts')+' parts · '+n('ledger')+' ledger rows · '+n('requests')+' requests</span><button class="btn primary" onclick="App.exportAll()">'+icon('down',18)+' Download all tabs</button></div></section>'+
+  '<section class="panel"><h2>Load parts from a physical count</h2><p class="hint">Download the template, fill it in Google Sheets, export as CSV and upload. New part codes are created with their opening stock. Existing codes are skipped, never overwritten.</p>'+
+  '<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" onclick="App.template()">'+icon('down',18)+' Template CSV</button><label class="btn primary">'+icon('in',18)+' Upload CSV<input type="file" accept=".csv,text/csv" class="hidden" onchange="App.importParts(this)"></label></div></section>'+
+  '<section class="panel"><h2>Data</h2><p class="hint">This test build stores everything in this browser. Back up before clearing browser data.</p>'+
+  '<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" onclick="App.backup()">'+icon('down',18)+' Full backup (JSON)</button><label class="btn">'+icon('in',18)+' Restore backup<input type="file" accept=".json,application/json" class="hidden" onchange="App.restore(this)"></label></div>'+
+  '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px"><button class="btn" onclick="App.resetDemo()">Reload sample data</button><button class="btn danger" onclick="App.startFresh()">Start fresh (empty)</button></div></section></div>'+
+  '<div class="section-title">For the development team</div><section class="panel"><div class="kv">'+
+  [['Source of truth','Ledger (append-only)'],['Stock','Sum of ledger qty per part'],['Destinations','Not warehouses; holding = issued minus returned'],['API actions',Object.keys(OPS).length+' named actions in OPS'],['Security here','Client-side only; test use'],['Production','Server checks, DB transactions, bcrypt/argon2']].map(x=>'<div><div class="k">'+x[0]+'</div><div class="v">'+x[1]+'</div></div>').join('')+
+  '</div><p class="hint" style="margin:14px 0 0">Action list: '+Object.keys(OPS).map(k=>'<span class="chip" style="margin:2px">'+k+'</span>').join(' ')+'</p></section>'}
+
+/* ---------- Sheets export tabs ---------- */
+const SHEET_TABS=[
+ ['parts','Parts',()=>({cols:['partCode','sku','name','category','model','uom','rack','purchasePrice','sellingPrice','gst','minQty','maxQty','barcode','description','active','id'].map(k=>({label:k,k})),rows:DB.parts})],
+ ['balances','Stock balances',()=>{const bal=balances();return{cols:[{label:'part_code',k:'partCode'},{label:'name',k:'name'},{label:'category',k:'category'},{label:'model',k:'model'},{label:'rack',k:'rack'},{label:'qty',k:'qty'},{label:'min_qty',k:'minQty'},{label:'max_qty',k:'maxQty'},{label:'status',k:'st'},{label:'as_of',k:'asof'}],
+   rows:activeParts().map(p=>{const q=bal[p.id]||0;return Object.assign({},p,{qty:q,st:STATUS_L[statusOf(p,q)][0],asof:fmtDT(Date.now())})})}}],
+ ['ledger','Ledger',()=>({cols:[{label:'timestamp',k:'ts',fmt:v=>new Date(v).toISOString()},...['type','partCode','partName','qty','before','after','destinationName','chassis','model','salesInvoice','supplierInvoice','challanNo','requestNo','requestedBy','issuedBy','userName','userRole','reason','remarks','reversesId','id'].map(k=>({label:k,k}))],rows:DB.ledger})],
+ ['requests','Requests',()=>({cols:[{label:'timestamp',k:'ts',fmt:v=>new Date(v).toISOString()},...['no','status','destinationName','chassis','model','salesInvoice','customer','requestedByName','createdByName','approvedByName','remarks'].map(k=>({label:k,k})),{label:'challans',k:'challans',fmt:v=>(v||[]).join(' ')},{label:'id',k:'id'}],rows:DB.requests})],
+ ['request_items','Request items',()=>({cols:['requestNo','partCode','partName','qty','issued'].map(k=>({label:k,k})),rows:DB.requests.flatMap(r=>r.items.map(i=>Object.assign({requestNo:r.no},i)))})],
+ ['challans','Challans',()=>({cols:[{label:'timestamp',k:'ts',fmt:v=>new Date(v).toISOString()},...['no','requestNo','destinationName','chassis','model','salesInvoice','customer','requestedByName','issuedByName','remarks'].map(k=>({label:k,k})),{label:'units',k:'items',fmt:v=>sum(v,'qty')}],rows:DB.challans})],
+ ['challan_items','Challan items',()=>({cols:['challanNo','partCode','partName','qty'].map(k=>({label:k,k})),rows:DB.challans.flatMap(c=>c.items.map(i=>Object.assign({challanNo:c.no},i)))})],
+ ['inwards','Stock-in entries',()=>({cols:[{label:'timestamp',k:'ts',fmt:v=>new Date(v).toISOString()},...['no','invoiceNo','invoiceDate','supplier','userName','remarks'].map(k=>({label:k,k})),{label:'units',k:'lines',fmt:v=>sum(v,'qty')}],rows:DB.inwards})],
+ ['destinations','Destinations',()=>({cols:['name','type','note','active','id'].map(k=>({label:k,k})),rows:DB.destinations})],
+ ['users','Users',()=>({cols:[...['name','username','role','active','deleted'].map(k=>({label:k,k})),{label:'lastLogin',k:'lastLogin',fmt:v=>v?new Date(v).toISOString():''},{label:'id',k:'id'}],rows:DB.users})],
+ ['audit','Audit log',()=>({cols:[{label:'timestamp',k:'ts',fmt:v=>new Date(v).toISOString()},...['userName','role','action','detail','entity'].map(k=>({label:k,k}))],rows:DB.audit})]
+];
+
+/* ---------- Challan document ---------- */
+function challanPaper(c){const S=DB.settings;
+  return'<div class="paper"><div class="p-head"><div><div class="p-brand">'+esc(S.dealership.toUpperCase())+'</div><div class="p-sub">Authorised Royal Enfield Dealer · '+esc(S.branch)+' · Dealer code '+esc(S.dealerCode)+'</div></div><div class="p-title">DELIVERY CHALLAN<span>Internal stock issue from central warehouse</span></div></div>'+
+  '<div class="p-meta">'+[['Challan no',c.no],['Date and time',fmtDT(c.ts)],['Request no',c.requestNo],['Destination',c.destinationName],['Chassis',c.chassis||'-'],['Bike model',c.model||'-'],['Sales invoice',c.salesInvoice||'-'],['Customer',c.customer||'-']].map(x=>'<div><div class="k">'+x[0]+'</div><div class="v">'+esc(x[1])+'</div></div>').join('')+'</div>'+
+  '<table><thead><tr><th style="width:40px">#</th><th>Part code</th><th>Description</th><th class="r" style="width:70px">Qty</th></tr></thead><tbody>'+c.items.map((i,n)=>'<tr><td>'+(n+1)+'</td><td>'+esc(i.partCode)+'</td><td>'+esc(i.partName)+'</td><td class="r">'+i.qty+'</td></tr>').join('')+
+  '</tbody><tfoot><tr><td colspan="3">Total units</td><td class="r">'+sum(c.items,'qty')+'</td></tr></tfoot></table>'+(c.remarks?'<p style="margin:12px 0 0"><b>Remarks:</b> '+esc(c.remarks)+'</p>':'')+
+  '<div class="p-sign"><div>Requested by<br><b>'+esc(c.requestedByName)+'</b></div><div>Issued by<br><b>'+esc(c.issuedByName)+'</b></div><div>Received by (sign)<br>&nbsp;</div></div><div class="p-foot">Generated '+fmtDT(Date.now())+' · GMA &amp; Parts Stock (MVP test build)</div></div>'}
+
+/* =========================================================================
+   9. ACTIONS (event handlers)
+   ========================================================================= */
+function guard(fn){return function(){try{return fn.apply(null,arguments)}catch(e){toast(e.message||String(e),'error')}}}
+const App={
+  closeModal,signOut:()=>signOut(false),
+  login:guard(e=>{e.preventDefault();const err=$('#login-err');try{signIn($('#login-u').value,$('#login-p').value);const k=(location.hash.replace(/^#\/?/,'')||'dashboard');ROUTE=ROUTES[k]?k:'dashboard';render()}catch(x){err.textContent=x.message;err.classList.remove('hidden');$('#login-p').value='';$('#login-p').focus()}}),
+  account(){openModal({title:'Your account',size:'narrow',body:'<div style="display:flex;gap:14px;align-items:center"><div class="avatar" style="width:52px;height:52px;font-size:20px">'+esc(initials(ME.name))+'</div><div><div class="strong" style="font-size:17px">'+esc(ME.name)+'</div><div class="sub">@'+esc(ME.username)+' · '+esc(ROLES[ME.role].label)+'</div></div></div>'+
+    '<form id="f-pw" onsubmit="App.changePw(event)" style="margin-top:20px"><div class="section-title" style="margin-top:0">Change password</div><div class="form-grid" style="grid-template-columns:1fr"><label class="field">Current password<input type="password" name="old" autocomplete="current-password" required></label><label class="field">New password (8+ characters)<input type="password" name="nw" autocomplete="new-password" required minlength="8"></label></div><div class="form-foot"><span></span><button class="btn">Update password</button></div></form>',
+    foot:'<button class="btn danger" onclick="App.signOut()">'+icon('logout',18)+' Sign out</button>',focus:false})},
+  changePw:guard(e=>{e.preventDefault();const f=e.target;API.call('changeOwnPassword',f.old.value,f.nw.value);closeModal();toast('Password updated')}),
+  more(){const ks=Object.keys(ROUTES).filter(allowed);openModal({title:'Menu',size:'narrow',body:'<div class="nav" style="margin:0">'+ks.map(k=>'<a href="#/'+k+'" class="'+(k===ROUTE?'on':'')+'" onclick="App.closeModal()">'+icon(ROUTES[k].i)+'<span>'+esc(ROUTES[k].t)+'</span></a>').join('')+'</div>',
+    foot:'<button class="btn" onclick="App.account()">'+icon('users',18)+' '+esc(ME.name)+'</button><button class="btn danger" onclick="App.signOut()">'+icon('logout',18)+' Sign out</button>',focus:false})},
+  invFilter(){VS.inv={q:$('#inv-q').value,cat:$('#inv-cat').value,model:$('#inv-model').value,st:$('#inv-st').value};$('#inv-results').innerHTML=invResults()},
+  ledFilter(){VS.led={q:$('#led-q').value,type:$('#led-type').value,from:$('#led-from').value,to:$('#led-to').value};$('#led-results').innerHTML=ledgerResults()},
+  partDetail(id){const p=partById(id);const q=stockOf(id);const st=statusOf(p,q);const h=holdings();
+    const held=DB.destinations.map(d=>[d,(h[d.id]||{})[id]||0]).filter(x=>x[1]>0);const mv=DB.ledger.filter(r=>r.partId===id).slice(-25).reverse();
+    openModal({title:p.name,size:'wide',headExtra:stBadge(st),focus:false,body:
+     '<div class="grid g-main"><div class="kv">'+[['Part code',p.partCode],['SKU',p.sku||'-'],['Category',p.category],['Bike model',p.model],['Rack',p.rack||'-'],['Unit',p.uom],['Min / max',p.minQty+' / '+(p.maxQty||'-')],['GST',p.gst+'%']].concat(can('see_value')?[['Purchase price',fmtINR(p.purchasePrice)],['Selling price',fmtINR(p.sellingPrice)]]:[]).map(x=>'<div><div class="k">'+x[0]+'</div><div class="v">'+esc(x[1])+'</div></div>').join('')+'</div>'+
+     '<div class="stat gold"><div class="l">In the warehouse now</div><div class="v" style="font-size:48px">'+q+'</div><div class="s">'+(held.length?'Plus '+held.reduce((a,x)=>a+x[1],0)+' unit(s) out at destinations':'Nothing held at destinations')+'</div></div></div>'+
+     (held.length?'<div class="section-title">Out at destinations</div>'+held.map(([d,n])=>'<span class="chip" style="margin:0 6px 6px 0">'+esc(d.name)+': <b style="margin-left:4px">'+n+'</b></span>').join(''):'')+
+     '<div class="section-title">Latest movements</div>'+tableHTML([{label:'When',html:r=>fmtDT(r.ts)},{label:'Type',html:r=>mvBadge(r.type)},{label:'Qty',num:true,html:r=>qtyCell(r.qty)},{label:'After',num:true,k:'after'},{label:'Reference',html:r=>refCell(r)},{label:'By',k:'userName'}],mv),
+     foot:(can('parts_deactivate')?'<button class="btn ghost" onclick="App.togglePart(\''+id+'\')">Deactivate part</button>':'')+(can('adjust')?'<button class="btn" onclick="VS.ret=\'adjust\';location.hash=\'#/returns\'">Adjust</button>':'')+(can('parts_edit')?'<button class="btn" onclick="App.partForm(\''+id+'\')">'+icon('edit',16)+' Edit</button>':'')+(can('stock_in')?'<button class="btn primary" onclick="App.goStockIn(\''+id+'\')">'+icon('in',16)+' Stock in</button>':'')})},
+  partForm(id){const p=id?partById(id):{partCode:'',sku:'',name:'',category:'',model:'Universal',uom:'Nos',rack:'',purchasePrice:'',sellingPrice:'',gst:28,minQty:2,maxQty:10,barcode:'',description:''};
+    const cats=[...new Set(DB.parts.map(x=>x.category))];const F=(n,l,v,t,extra)=>'<label class="field">'+l+'<input name="'+n+'" value="'+esc(v)+'" type="'+(t||'text')+'" '+(extra||'')+'></label>';
+    openModal({title:id?'Edit part':'Add part',size:'wide',body:'<form id="f-part" onsubmit="App.savePart(event,\''+(id||'')+'\')"><datalist id="dl-cats">'+cats.map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist><div class="form-grid three">'+
+      F('partCode','Royal Enfield part code <span class="req">*</span>',p.partCode,'text','required autocapitalize="characters"')+F('sku','Dealer SKU',p.sku)+F('name','Part name <span class="req">*</span>',p.name,'text','required')+
+      '<label class="field">Category<input name="category" list="dl-cats" value="'+esc(p.category)+'"></label><label class="field">Bike model<select name="model">'+MODELS.map(m=>'<option '+(m===p.model?'selected':'')+'>'+m+'</option>').join('')+'</select></label>'+
+      '<label class="field">Unit<select name="uom">'+['Nos','Pair','Set','Kit','Litre'].map(m=>'<option '+(m===p.uom?'selected':'')+'>'+m+'</option>').join('')+'</select></label>'+
+      F('rack','Rack / shelf',p.rack)+F('purchasePrice','Purchase price (₹)',p.purchasePrice,'number','min="0" step="0.01" inputmode="decimal"')+F('sellingPrice','Selling price (₹)',p.sellingPrice,'number','min="0" step="0.01" inputmode="decimal"')+
+      '<label class="field">GST rate<select name="gst">'+[0,5,12,18,28].map(g=>'<option value="'+g+'" '+(+g===+p.gst?'selected':'')+'>'+g+'%</option>').join('')+'</select></label>'+
+      F('minQty','Minimum stock (alert level)',p.minQty,'number','min="0" inputmode="numeric"')+F('maxQty','Maximum stock',p.maxQty,'number','min="0" inputmode="numeric"')+
+      F('barcode','Barcode / QR (future use)',p.barcode)+'<label class="field span-2">Description<input name="description" value="'+esc(p.description)+'"></label>'+
+      (id?'':F('openingQty','Opening stock (from physical count)','','number','min="0" inputmode="numeric" placeholder="0"'))+'</div></form>',
+      foot:'<button class="btn ghost" onclick="App.closeModal()">Cancel</button><button class="btn primary" form="f-part" type="submit">'+icon('check',18)+' Save part</button>'})},
+  savePart:guard((e,id)=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));if(id)d.id=id;const p=API.call('savePart',d);closeModal();toast((id?'Saved ':'Created ')+p.partCode);refresh()}),
+  togglePart:guard(async id=>{const p=partById(id);const ok=await ask('Deactivate '+p.partCode+'?','The part is hidden from normal views. Its full history stays in the ledger and it can be reactivated later.','Deactivate',true);if(!ok)return;
+    try{API.call('setPartActive',id,false);toast('Part deactivated');refresh()}catch(x){toast(x.message,'error')}}),
+  goStockIn(id){VS.prefill=id;closeModal();if(ROUTE==='stockin'){render()}else location.hash='#/stockin'},
+  addLine(id,val,qty){const body=$('#'+id+' .lines-body');if(!body)return;const row=document.createElement('div');row.className='line';
+    row.innerHTML='<div class="line-part"><input list="dl-parts" class="ln-part" placeholder="Type part code or name" value="'+esc(val||'')+'" autocomplete="off" aria-label="Part"><div class="ln-info sub"></div></div><input type="number" class="ln-qty" min="1" step="1" inputmode="numeric" placeholder="Qty" value="'+esc(qty||'')+'" aria-label="Quantity"><button type="button" class="icon-btn" title="Remove line" aria-label="Remove line">'+icon('x',18)+'</button>';
+    row.querySelector('button').onclick=()=>row.remove();const inp=row.querySelector('.ln-part');
+    const upd=()=>{const p=resolvePart(inp.value);const info=row.querySelector('.ln-info');if(p){const q=stockOf(p.id);info.innerHTML=esc(p.name)+' · In stock <b>'+q+'</b> · Rack '+esc(p.rack||'-')}else info.textContent=inp.value?'No matching part. Pick one from the list.':''};
+    inp.addEventListener('input',upd);inp.addEventListener('change',upd);upd();body.appendChild(row)},
+  submitStockIn:guard(e=>{e.preventDefault();const f=e.target;const lines=readLines('in-lines');
+    if(DB.inwards.some(w=>w.invoiceNo.toUpperCase()===f.invoiceNo.value.trim().toUpperCase())&&!confirm('Invoice '+f.invoiceNo.value+' has already been entered. Enter it again?'))return;
+    const grn=API.call('stockIn',{invoiceNo:f.invoiceNo.value,invoiceDate:f.invoiceDate.value,supplier:f.supplier.value,remarks:f.remarks.value,lines});toast('Saved '+grn+': '+sum(lines,'qty')+' unit(s) added');refresh()}),
+  reqTab(t){VS.req.tab=t;render()},reqMine(v){VS.req.mine=v;render()},
+  newRequest(issueNow){const rep=ME.role==='sales_rep';
+    openModal({title:issueNow?'Issue stock':'New stock request',size:'wide',body:partsDatalist()+'<form id="f-req" onsubmit="App.submitRequest(event)"><div class="form-grid three">'+
+     '<label class="field">Where is it going? <span class="req">*</span><select name="dest" id="rq-dest" onchange="App.refFields()" required>'+destOptions('DS_CUST')+'</select></label>'+
+     '<label class="field" data-ref="chassis">Chassis number<input name="chassis" placeholder="Full or last 4 characters" maxlength="20" autocapitalize="characters" autocomplete="off"></label>'+
+     '<label class="field" data-ref="model">Bike model<select name="model"><option value="">Not known</option>'+MODELS.filter(m=>m!=='Universal').map(m=>'<option>'+m+'</option>').join('')+'</select></label>'+
+     '<label class="field" data-ref="invoice">Sales invoice no.<input name="salesInvoice" placeholder="If there is no chassis" autocomplete="off"></label>'+
+     '<label class="field" data-ref="customer">Customer name / phone<input name="customer" placeholder="Optional" autocomplete="off"></label>'+
+     '<label class="field">Requested by<select name="reqBy" '+(rep?'disabled':'')+'>'+userOptions(ME.id,u=>hasPerm(u,'request_create')||u.id===ME.id)+'</select></label></div>'+
+     '<div class="note" id="rq-hint" style="margin-top:14px"></div>'+linesEditor('rq-lines')+
+     '<label class="field" style="margin-top:12px">Remarks<textarea name="remarks" rows="2" placeholder="Optional"></textarea></label>'+
+     (can('issue')?'<label class="check"><input type="checkbox" name="issueNow" '+(issueNow?'checked':'')+'> Issue immediately and create the delivery challan</label>':'')+'</form>',
+     foot:'<button class="btn ghost" onclick="App.closeModal()">Cancel</button><button class="btn primary" form="f-req" type="submit">'+icon('check',18)+(issueNow?' Issue and create challan':' Send request')+'</button>'});
+    App.addLine('rq-lines');App.refFields()},
+  refFields(){const d=destById($('#rq-dest').value);const t=d?d.type:'';const show=(k,v)=>$$('#f-req [data-ref="'+k+'"]').forEach(el=>el.classList.toggle('hidden',!v));
+    show('chassis',t==='customer_vehicle');show('model',t==='customer_vehicle');show('invoice',t==='customer_vehicle'||t==='counter_sale');show('customer',t==='customer_vehicle'||t==='counter_sale');
+    $('#rq-hint').innerHTML=t==='customer_vehicle'?'<b>Reference needed:</b> enter the chassis number (last 4 at least) or the sales invoice number, so the part is always traceable to the bike.':
+      t==='counter_sale'?'<b>Reference needed:</b> the sales invoice number.':t?'No bike reference needed. The destination itself is the reference, and the stock will show as held there until returned.':'Choose where the stock is going.'},
+  submitRequest:guard(e=>{e.preventDefault();const f=e.target;const items=readLines('rq-lines');
+    const d={destinationId:f.dest.value,chassis:f.chassis.value,model:f.model.value,salesInvoice:f.salesInvoice.value,customer:f.customer.value,remarks:f.remarks.value,items,requestedById:f.reqBy.value||ME.id};
+    const t=(destById(d.destinationId)||{}).type;if(t!=='customer_vehicle'){d.chassis='';d.model=''}if(t!=='customer_vehicle'&&t!=='counter_sale'){d.salesInvoice='';d.customer=''}
+    if(f.issueNow&&f.issueNow.checked){const res=API.call('createAndIssue',d);closeModal();refresh();
+      if(res.challan){toast('Issued on '+res.challan.no);App.challan(res.challan.no)}else toast('Request '+res.request.no+' saved. It needs approval before issue.')}
+    else{const r=API.call('createRequest',d);closeModal();toast('Request '+r.no+' sent to the store');refresh()}}),
+  reqDetail(id){const r=reqById(id);const bal=balances();const canIssue=isIssuable(r)&&can('issue');const needsApproval=r.status==='Requested'&&DB.settings.approvalRequired;
+    const items=tableHTML([{label:'Part',html:i=>'<div class="code">'+esc(i.partCode)+'</div><div class="sub">'+esc(i.partName)+'</div>'},{label:'Requested',num:true,k:'qty'},{label:'Issued',num:true,k:'issued'},
+      {label:'In stock now',num:true,html:i=>{const q=bal[i.partId]||0;return'<span class="'+(q<(i.qty-i.issued)?'qneg':'')+'">'+q+'</span>'}}].concat(canIssue?[{label:'Issue now',num:true,html:i=>{const rem=i.qty-i.issued;if(rem<=0)return'<span class="sub">Done</span>';const q=Math.max(0,Math.min(rem,bal[i.partId]||0));return'<input class="iss-qty" data-pid="'+i.partId+'" type="number" min="0" max="'+rem+'" value="'+q+'" inputmode="numeric" style="width:90px;height:36px;margin-left:auto;text-align:right">'}}]:[]),r.items,{cards:true});
+    const canCancel=['Requested','Approved'].includes(r.status)&&(r.createdById===ME.id||r.requestedById===ME.id||can('request_approve')||can('issue'));
+    openModal({title:r.no,size:'wide',headExtra:reqBadge(r.status),focus:false,body:
+     '<div class="kv">'+[['Going to',r.destinationName],['Chassis',r.chassis||'-'],['Bike model',r.model||'-'],['Sales invoice',r.salesInvoice||'-'],['Customer',r.customer||'-'],['Requested by',r.requestedByName],['Raised',fmtDT(r.ts)],['Remarks',r.remarks||'-']].map(x=>'<div><div class="k">'+x[0]+'</div><div class="v">'+esc(x[1])+'</div></div>').join('')+'</div>'+
+     '<div class="section-title">Parts</div>'+items+(canIssue?'<label class="field" style="margin-top:12px">Issue remarks<input id="iss-rem" placeholder="Optional, printed on the challan"></label>':'')+
+     (needsApproval&&!can('request_approve')?'<div class="note" style="margin-top:14px">Waiting for a manager to approve.</div>':'')+
+     (r.challans.length?'<div class="section-title">Challans</div>'+r.challans.map(n=>'<button class="btn sm" style="margin:0 6px 6px 0" onclick="App.challan(\''+esc(n)+'\')">'+icon('doc',16)+' '+esc(n)+'</button>').join(''):'')+
+     '<div class="section-title">History</div><div class="timeline">'+r.history.map(h=>'<div>'+esc(h.action)+'<br><span>'+esc(h.by)+' · '+fmtDT(h.ts)+'</span></div>').join('')+'</div>',
+     foot:(canCancel?'<button class="btn ghost" onclick="App.cancelReq(\''+id+'\')">Cancel request</button>':'')+
+      (['Requested','Approved'].includes(r.status)&&can('request_approve')?'<button class="btn danger" onclick="App.rejectReq(\''+id+'\')">Reject</button>':'')+
+      (needsApproval&&can('request_approve')?'<button class="btn primary" onclick="App.approve(\''+id+'\')">'+icon('check',18)+' Approve</button>':'')+
+      (r.status==='Partially issued'&&can('issue')?'<button class="btn" onclick="App.closeShort(\''+id+'\')">Close balance</button>':'')+
+      (canIssue?'<button class="btn primary" onclick="App.issue(\''+id+'\')">'+icon('out',18)+' Issue and create challan</button>':'')})},
+  approve:guard(id=>{API.call('approve',id);toast('Approved');refresh();App.reqDetail(id)}),
+  rejectReq:guard(async id=>{const why=await ask('Reject request?','The person who raised it will see the reason.','Reject',true,'Reason');if(why===null)return;try{API.call('reject',id,why);toast('Request rejected');refresh()}catch(x){toast(x.message,'error')}}),
+  cancelReq:guard(async id=>{const ok=await ask('Cancel this request?','Nothing has been issued against it yet.','Cancel request',true);if(!ok)return;try{API.call('cancel',id);toast('Request cancelled');refresh()}catch(x){toast(x.message,'error')}}),
+  closeShort:guard(async id=>{const ok=await ask('Close the balance?','The rest of this request will not be issued. What was issued stays as it is.','Close balance',false);if(!ok)return;try{API.call('closeShort',id);toast('Request closed');refresh()}catch(x){toast(x.message,'error')}}),
+  issue:guard(id=>{const lines=$$('.iss-qty').map(i=>({partId:i.dataset.pid,qty:parseInt(i.value,10)||0})).filter(l=>l.qty>0);
+    if(!lines.length)throw new Error('Enter at least one quantity to issue.');const c=API.call('issue',id,lines,($('#iss-rem')||{}).value||'');refresh();toast('Issued on '+c.no);App.challan(c.no)}),
+  challan(no){const c=DB.challans.find(x=>x.no===no);if(!c)return;openModal({title:'Delivery challan',size:'wide',focus:false,body:challanPaper(c),foot:'<button class="btn ghost" onclick="App.closeModal()">Close</button><button class="btn primary" onclick="App.printChallan(\''+esc(no)+'\')">'+icon('print',18)+' Print / save PDF</button>'})},
+  printChallan(no){const c=DB.challans.find(x=>x.no===no);$('#print-root').innerHTML=challanPaper(c);setTimeout(()=>window.print(),50)},
+  retTab(t){VS.ret=t;render()},
+  rtnLoad(){const mode=$('#rtn-mode').value;$('#rtn-ch-wrap').classList.toggle('hidden',mode!=='challan');$('#rtn-ds-wrap').classList.toggle('hidden',mode!=='destination');let rows=[];
+    if(mode==='challan'){const c=DB.challans.find(x=>x.no===$('#rtn-ch').value);if(c)rows=c.items.map(i=>({partId:i.partId,partCode:i.partCode,partName:i.partName,max:challanReturnable(c.no,i.partId)}))}
+    else{const d=$('#rtn-ds').value;const h=holdings()[d]||{};rows=Object.entries(h).filter(x=>x[1]>0).map(([pid,n])=>{const p=partById(pid);return{partId:pid,partCode:p.partCode,partName:p.name,max:n}})}
+    $('#rtn-items').innerHTML=rows.length?tableHTML([{label:'Part',html:r=>'<div class="code">'+esc(r.partCode)+'</div><div class="sub">'+esc(r.partName)+'</div>'},{label:'Can return',num:true,k:'max'},
+      {label:'Return qty',num:true,html:r=>r.max>0?'<input class="rtn-qty" data-pid="'+r.partId+'" type="number" min="0" max="'+r.max+'" value="0" inputmode="numeric" style="width:90px;height:36px;margin-left:auto;text-align:right">':'<span class="sub">All returned</span>'}],rows):'<div class="empty">Choose a challan or destination to see what can be returned.</div>'},
+  submitReturn:guard(e=>{e.preventDefault();const f=e.target;const lines=$$('.rtn-qty').map(i=>({partId:i.dataset.pid,qty:parseInt(i.value,10)||0})).filter(l=>l.qty>0);
+    const no=API.call('returnStock',{mode:f.mode.value,challanNo:f.challanNo.value,destinationId:f.destinationId.value,condition:f.condition.value,remarks:f.remarks.value,lines});toast('Return '+no+' recorded');refresh()}),
+  adjInfo(){const p=resolvePart($('#adj-part').value);$('#adj-info').innerHTML=p?esc(p.name)+' · In stock <b style="color:var(--gold-2)">'+stockOf(p.id)+'</b>':''},
+  submitAdjust:guard(e=>{e.preventDefault();const f=e.target;const p=resolvePart(f.part.value);if(!p)throw new Error('Pick a part from the list.');
+    const no=API.call('adjust',{partId:p.id,qty:(parseInt(f.qty.value,10)||0)*(+f.dir.value),reason:f.reason.value,remarks:f.remarks.value});toast('Adjustment '+no+' saved');refresh()}),
+  reverse:guard(async id=>{const r=DB.ledger.find(x=>x.id===id);const why=await ask('Reverse this entry?','This adds a new line that cancels <b>'+MV[r.type][0]+' '+(r.qty>0?'+':'')+r.qty+'</b> of '+esc(r.partCode)+'. The original stays in the ledger.','Reverse entry',true,'Reason');
+    if(why===null)return;try{API.call('reverse',id,why);toast('Entry reversed');refresh()}catch(x){toast(x.message,'error')}}),
+  destDetail(id){const d=destById(id);const h=holdings()[id]||{};const rows=Object.entries(h).filter(x=>x[1]>0).map(([pid,n])=>{const p=partById(pid);return{p,n}});
+    const mv=DB.ledger.filter(r=>r.destinationId===id).slice(-30).reverse();
+    openModal({title:d.name,size:'wide',headExtra:badge(DEST_TYPES[d.type],'gold'),focus:false,body:'<div class="section-title" style="margin-top:0">'+(['customer_vehicle','counter_sale'].includes(d.type)?'Issued, net of returns':'Currently held here')+'</div>'+
+     tableHTML([{label:'Part',html:r=>'<div class="code">'+esc(r.p.partCode)+'</div><div class="sub">'+esc(r.p.name)+'</div>'},{label:'Units',num:true,k:'n'}],rows,{empty:'Nothing held here right now.'})+
+     '<div class="section-title">Latest movements</div>'+tableHTML([{label:'When',html:r=>fmtDT(r.ts)},{label:'Type',html:r=>mvBadge(r.type)},{label:'Part',html:r=>esc(r.partCode)+' '+esc(r.partName)},{label:'Qty',num:true,html:r=>String(-r.qty)},{label:'Challan',html:r=>esc(r.challanNo||'-')},{label:'By',k:'userName'}],mv),
+     foot:(can('destinations_edit')?'<button class="btn" onclick="App.destForm(\''+id+'\')">'+icon('edit',16)+' Edit</button>':'')+(can('return')&&rows.length&&d.type!=='customer_vehicle'&&d.type!=='counter_sale'?'<button class="btn primary" onclick="VS.ret=\'return\';location.hash=\'#/returns\'">'+icon('undo',16)+' Return to warehouse</button>':'')})},
+  destForm(id){const d=id?destById(id):{name:'',type:'display',note:''};openModal({title:id?'Edit destination':'Add destination',size:'narrow',body:'<form id="f-dest" onsubmit="App.saveDest(event,\''+(id||'')+'\')"><div class="form-grid" style="grid-template-columns:1fr">'+
+    '<label class="field">Name<input name="name" value="'+esc(d.name)+'" required placeholder="e.g. Display bike: Shotgun 650"></label><label class="field">Type<select name="type">'+Object.entries(DEST_TYPES).map(([k,v])=>'<option value="'+k+'" '+(k===d.type?'selected':'')+'>'+v+'</option>').join('')+'</select></label>'+
+    '<label class="field">Note<input name="note" value="'+esc(d.note||'')+'"></label></div></form>',foot:'<button class="btn ghost" onclick="App.closeModal()">Cancel</button><button class="btn primary" form="f-dest">Save</button>'})},
+  saveDest:guard((e,id)=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));if(id)d.id=id;API.call('saveDestination',d);closeModal();toast('Destination saved');refresh()}),
+  openReport(id){VS.rep=id;VS.repF={};render();window.scrollTo(0,0)},
+  repF(){const f=VS.repF;if($('#rf-from'))f.from=$('#rf-from').value;if($('#rf-to'))f.to=$('#rf-to').value;if($('#rf-ch'))f.chassis=$('#rf-ch').value;render()},
+  repCSV(){const R=REPORTS.find(r=>r.id===VS.rep);const o=R.run(VS.repF);download('JA_'+R.id+'_'+stamp()+'.csv',toCSV(o.cols.map(c=>Object.assign({},c,{csv:c.csv||(c.html&&!c.k?null:c.csv)})),o.rows));
+    try{mutate(()=>audit(ME,'Report exported',R.t,'export'))}catch(e){}},
+  exportTab:guard(k=>{if(!can('export')&&!can('settings')&&k!=='audit')throw new Error('Your role cannot export data.');if(k==='audit'&&!can('audit_view'))throw new Error('Not allowed.');
+    const t=SHEET_TABS.find(x=>x[0]===k);const o=t[2]();download('JA_'+k+'_'+stamp()+'.csv',toCSV(o.cols,o.rows));try{mutate(()=>audit(ME,'Data exported',t[1]+' ('+o.rows.length+' rows)','export'))}catch(e){}}),
+  exportAll(){SHEET_TABS.forEach((t,i)=>setTimeout(()=>App.exportTab(t[0]),i*450))},
+  template(){download('JA_parts_import_template.csv','﻿part_code,name,category,model,sku,uom,rack,purchase_price,selling_price,gst,min_qty,max_qty,opening_qty\r\nGMA-EXAMPLE-01,Example engine guard,Protection,Classic 350,JA-2001,Nos,D-09,2500,3400,28,2,8,5\r\n')},
+  importParts:guard(inp=>{const file=inp.files[0];if(!file)return;const rd=new FileReader();rd.onload=()=>{try{const rows=parseCSV(rd.result);if(rows.length<2)throw new Error('The file has no data rows.');
+    const head=rows[0].map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));if(!head.includes('part_code')||!head.includes('name'))throw new Error('Columns part_code and name are required. Use the template.');
+    const objs=rows.slice(1).map(r=>Object.fromEntries(head.map((h,i)=>[h,r[i]||''])));const res=API.call('importParts',objs);toast(res.created+' part(s) created, '+res.skipped+' skipped, '+res.units+' opening unit(s)');refresh()}catch(x){toast(x.message,'error')}inp.value=''};rd.readAsText(file)}),
+  backup(){download('JA_stock_backup_'+stamp()+'.json',JSON.stringify(DB,null,1),'application/json');try{mutate(()=>audit(ME,'Backup downloaded','','export'))}catch(e){}},
+  restore:guard(inp=>{const file=inp.files[0];if(!file)return;const rd=new FileReader();rd.onload=async()=>{inp.value='';try{const d=JSON.parse(rd.result);if(!d||d.version!==1||!Array.isArray(d.ledger)||!Array.isArray(d.users))throw new Error('This is not a valid backup file.');
+    const ok=await ask('Restore this backup?','All current data in this browser will be replaced by the backup ('+d.parts.length+' parts, '+d.ledger.length+' ledger rows).','Restore',true);if(!ok)return;
+    if(!can('settings'))throw new Error('Not allowed.');DB=d;invalidate();audit(ME,'Backup restored',file.name,'data');save();toast('Backup restored');refresh()}catch(x){toast(x.message,'error')}};rd.readAsText(file)}),
+  resetDemo:guard(async()=>{const ok=await ask('Reload sample data?','Everything in this browser is replaced with the sample dealership data. Logins go back to the test passwords.','Reload sample data',true);if(!ok)return;seed();save();invalidate();
+    sessionStorage.setItem(SESSION_KEY,JSON.stringify({userId:'US_SUPER',exp:Date.now()+10*3600e3}));ME=userById('US_SUPER');toast('Sample data loaded. You are signed in as Super Admin.');ROUTE='dashboard';location.hash='#/dashboard';render()}),
+  startFresh:guard(async()=>{const v=await ask('Start with an empty system?','All parts, stock, requests and users are removed. Only the Super Admin login remains, with its current password. Type RESET to confirm.','Erase everything',true,'Type RESET');if(v===null)return;
+    if(v.trim()!=='RESET')throw new Error('Not erased. You must type RESET.');const su=userById('US_SUPER')||DB.users.find(u=>u.role==='super_admin');const keep=DB.settings;DB=baseDB();DB.settings=keep;DB.users.push(su);
+    DB.destinations=[['DS_CUST','Customer vehicle','customer_vehicle'],['DS_COUNTER','Counter sale','counter_sale'],['DS_SWALL','Sales display wall','display'],['DS_SVWALL','Service display wall','display'],['DS_WS','Service workshop','department']].map(d=>({id:d[0],name:d[1],type:d[2],note:'',active:true}));
+    audit(su,'System reset','All data erased; empty system started','data');save();invalidate();sessionStorage.setItem(SESSION_KEY,JSON.stringify({userId:su.id,exp:Date.now()+10*3600e3}));ME=su;toast('Empty system ready. Add parts or upload your physical count.');location.hash='#/settings';render()}),
+  saveSettings:guard(e=>{e.preventDefault();const f=e.target;API.call('saveSettings',{approvalRequired:f.approvalRequired.checked,allowNegative:f.allowNegative.checked,dealership:f.dealership.value.trim()||'Jain Automobiles',branch:f.branch.value.trim(),dealerCode:f.dealerCode.value.trim(),sessionHours:Math.min(24,Math.max(1,parseInt(f.sessionHours.value,10)||10))});toast('Settings saved');refresh()}),
+  userForm(id){const u=id?userById(id):{name:'',username:'',role:'sales_rep',phone:''};const roles=Object.keys(ROLES).filter(r=>r!=='super_admin'||ME.role==='super_admin'||u.role==='super_admin');
+    openModal({title:id?'Edit user':'Add user',body:'<form id="f-user" onsubmit="App.saveUser(event,\''+(id||'')+'\')"><div class="form-grid"><label class="field">Full name<input name="name" value="'+esc(u.name)+'" required></label>'+
+     '<label class="field">Username (for sign-in)<input name="username" value="'+esc(u.username)+'" required autocapitalize="none" spellcheck="false"></label>'+
+     '<label class="field">Role<select name="role">'+roles.map(r=>'<option value="'+r+'" '+(r===u.role?'selected':'')+'>'+ROLES[r].label+'</option>').join('')+'</select></label><label class="field">Phone<input name="phone" value="'+esc(u.phone||'')+'" inputmode="tel"></label>'+
+     (id?'':'<label class="field span-2">Starting password (8+ characters)<input name="password" type="text" required minlength="8" autocomplete="off" placeholder="Share this with the person privately"></label>')+'</div></form>'+
+     (id?'<div class="section-title">Recent sign-ins and actions</div>'+tableHTML([{label:'When',html:a=>fmtDT(a.ts)},{label:'Action',k:'action'},{label:'Detail',html:a=>'<span class="sub">'+esc(a.detail)+'</span>'}],DB.audit.filter(a=>a.userId===id).slice(-8).reverse(),{empty:'No activity yet.'}):''),
+     foot:(id&&id!==ME.id?'<button class="btn ghost" onclick="App.toggleUser(\''+id+'\')">'+(u.active?'Deactivate':'Activate')+'</button><button class="btn danger" onclick="App.removeUser(\''+id+'\')">Remove</button>':'')+'<button class="btn primary" form="f-user">'+icon('check',18)+' Save</button>'})},
+  saveUser:guard((e,id)=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));if(id)d.id=id;const u=API.call('saveUser',d);closeModal();toast((id?'Saved ':'Created ')+u.name);refresh()}),
+  resetPw:guard(async id=>{const u=userById(id);const pw=await ask('Reset password for '+u.name,'Type a new password (8+ characters) and share it with them privately.','Set password',false,'New password');if(pw===null)return;try{API.call('resetPassword',id,pw);toast('Password reset for '+u.name)}catch(x){toast(x.message,'error')}}),
+  toggleUser:guard(id=>{const u=userById(id);API.call('setUserActive',id,!u.active);closeModal();toast(u.name+(u.active?' deactivated':' activated'));refresh()}),
+  removeUser:guard(async id=>{const u=userById(id);const ok=await ask('Remove '+u.name+'?','They can no longer sign in. Everything they did stays in the ledger and audit log.','Remove user',true);if(!ok)return;try{API.call('removeUser',id);toast(u.name+' removed');refresh()}catch(x){toast(x.message,'error')}})
+};
+window.App=App;window.VS=VS;window.render=render;
+
+/* =========================================================================
+   10. START
+   ========================================================================= */
+load();ME=currentUser();
+{const k=(location.hash.replace(/^#\/?/,'')||'dashboard');ROUTE=ROUTES[k]?k:'dashboard'}
+render();
+</script>
+</body>
+</html>
