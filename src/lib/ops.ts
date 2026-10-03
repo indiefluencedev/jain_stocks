@@ -1,16 +1,18 @@
 /**
  * @file src/lib/ops.ts
  * @description Master Operations API Layer & Transaction Controller.
- * 
+ *
  * Provides transactional methods for stock movements, audit logging, authorization enforcement, and CRUD updates:
- * 1. Authentication & Session Management (`signIn`, `signOut`, `currentUser`)
- * 2. Immutable Audit Trail Logging (`auditLog`)
- * 3. Inward Stock GRN Receiving (`rawStockIn`)
- * 4. Stock Request Creation & Approval State Transitions (`rawCreateRequest`, `approveRequest`, `rejectRequest`)
- * 5. Stock Issuance & Delivery Challan Generation (`rawIssue`)
- * 6. Returns & Stock Adjustments (`rawReturnStock`, `rawAdjust`)
- * 7. Protected Ledger Reversals (`reverseLedgerRow`)
- * 
+ * 1. Immutable Audit Trail Logging (`auditLog`)
+ * 2. Inward Stock GRN Receiving (`rawStockIn`)
+ * 3. Stock Request Creation & Approval State Transitions (`rawCreateRequest`, `approveRequest`, `rejectRequest`)
+ * 4. Stock Issuance & Delivery Challan Generation (`rawIssue`)
+ * 5. Returns & Stock Adjustments (`rawReturnStock`, `rawAdjust`)
+ * 6. Protected Ledger Reversals (`reverseLedgerRow`)
+ *
+ * NOTE: Authentication is handled by better-auth (see `src/lib/auth.ts`).
+ * The `hasPerm()` function below is the RBAC enforcement layer used by the UI.
+ *
  * @module Ops
  */
 
@@ -24,7 +26,6 @@ import {
   Inward,
   Permission,
   Role,
-  Session,
 } from '@/types';
 import {
   getDB,
@@ -39,7 +40,6 @@ import {
   now,
   uid,
   randHex,
-  hashPw,
   rawStockIn,
   rawCreateRequest,
   rawIssue,
@@ -47,12 +47,11 @@ import {
   rawAdjust,
   challanReturnable,
   sum,
-  SESSION_KEY,
   activeParts,
   seed,
   baseDB,
 } from './store';
-import { ROLES, DEST_TYPES, MV, ADJ_REASONS } from './constants';
+import { ROLES, DEST_TYPES, MV } from './constants';
 
 /**
  * Checks whether a given user holds a specific permission according to their assigned role.
@@ -577,106 +576,38 @@ export const PERM_FOR: Record<string, Permission> = {
   importParts: 'settings',
 };
 
-export function getSession(): Session | null {
+/**
+ * Resolves the currently authenticated user from the better-auth session.
+ * Falls back to sessionStorage for backward compatibility during migration.
+ */
+export function currentUser(db: any = getDB()): User | null {
+  // better-auth session is handled in the client via useSession hook.
+  // This function is kept for backward compatibility with server-side code.
   if (typeof window === 'undefined') return null;
   try {
-    const item = sessionStorage.getItem(SESSION_KEY);
+    const item = sessionStorage.getItem('ja_stock_session');
     if (!item) return null;
-    const s: Session = JSON.parse(item);
-    if (s && s.exp > Date.now()) return s;
+    const s: { userId: string; exp: number } = JSON.parse(item);
+    if (s && s.exp > Date.now()) {
+      const u = db.users.find(
+        (x: User) => x.id === s.userId && x.active && !x.deleted
+      );
+      return u || null;
+    }
   } catch (e) {}
   return null;
 }
 
-export function currentUser(db: any = getDB()): User | null {
-  const s = getSession();
-  if (!s) return null;
-  const u = db.users.find(
-    (x: User) => x.id === s.userId && x.active && !x.deleted
-  );
-  return u || null;
-}
-
-export function signIn(username: string, pw: string): User {
-  const db = getDB();
-  username = String(username || '').trim().toLowerCase();
-  const g = db.loginGuard[username];
-  if (g && g.until > Date.now()) {
-    throw new Error(
-      'Too many failed attempts. Try again in ' +
-        Math.ceil((g.until - Date.now()) / 60000) +
-        ' minute(s).'
-    );
-  }
-  const U = db.users.find((u) => u.username === username && !u.deleted);
-  const ok = U && U.hash === hashPw(pw, U.salt);
-
-  if (!ok) {
-    const gg = db.loginGuard[username] || { fails: 0, until: 0 };
-    gg.fails++;
-    let msg = 'Incorrect username or password.';
-    if (gg.fails >= 5) {
-      gg.until = Date.now() + 5 * 60000;
-      gg.fails = 0;
-      msg = 'Too many failed attempts. Sign-in locked for 5 minutes.';
-    }
-    db.loginGuard[username] = gg;
-    auditLog(U || null, 'Sign-in failed', 'Username "' + username + '"', 'auth');
-    throw new Error(msg);
-  }
-
-  if (!U.active) {
-    auditLog(U, 'Sign-in blocked', 'Account deactivated', 'auth');
-    throw new Error('This account has been deactivated. Contact the administrator.');
-  }
-
-  delete db.loginGuard[username];
-  U.lastLogin = Date.now();
-  auditLog(U, 'Signed in', '', 'auth');
-
-  if (typeof window !== 'undefined') {
-    sessionStorage.setItem(
-      SESSION_KEY,
-      JSON.stringify({
-        userId: U.id,
-        exp: Date.now() + (db.settings.sessionHours || 10) * 3600e3,
-      })
-    );
-  }
-  return U;
-}
-
-export function signOut(silent = false): void {
-  if (typeof window === 'undefined') return;
-  const db = getDB();
-  const u = currentUser(db);
-  if (u && !silent) {
-    try {
-      mutate(() => auditLog(u, 'Signed out', '', 'auth'));
-    } catch (e) {}
-  }
-  sessionStorage.removeItem(SESSION_KEY);
-}
-
 export const API = {
   call<K extends keyof typeof OPS>(action: K, ...args: Parameters<(typeof OPS)[K]>): ReturnType<(typeof OPS)[K]> {
-    const s = getSession();
-    if (!s) {
-      signOut(true);
-      throw new Error('Your session has expired. Please sign in again.');
+    const db = getDB();
+    const U = currentUser(db);
+    if (!U) throw new Error('Not authenticated. Please sign in again.');
+    const perm = PERM_FOR[action as string];
+    if (perm && !hasPerm(U, perm)) {
+      throw new Error('Your role does not allow this action.');
     }
-    return mutate(() => {
-      const db = getDB();
-      const U = db.users.find(
-        (u) => u.id === s.userId && u.active && !u.deleted
-      );
-      if (!U) throw new Error('Your account is no longer active.');
-      const perm = PERM_FOR[action as string];
-      if (perm && !hasPerm(U, perm)) {
-        throw new Error('Your role does not allow this action.');
-      }
-      const fn = OPS[action] as any;
-      return fn(U, ...args);
-    });
+    const fn = OPS[action] as any;
+    return fn(U, ...args);
   },
 };

@@ -489,10 +489,8 @@ export function seed(): void {
     userCode: string,
     name: string,
     username: string,
-    role: any,
-    pw: string
+    role: any
   ): User => {
-    const salt = randHex(16);
     return {
       id: toUUID(userCode),
       code: userCode,
@@ -500,8 +498,6 @@ export function seed(): void {
       username,
       role,
       phone: '',
-      salt,
-      hash: hashPw(pw, salt),
       active: true,
       deleted: false,
       createdAt: Date.now(),
@@ -509,7 +505,7 @@ export function seed(): void {
     };
   };
 
-  DB.users.push(mk('US_SUPER', 'Super Admin', 'superadmin', 'super_admin', SUPER_PW));
+  DB.users.push(mk('US_SUPER', 'Super Admin', 'superadmin', 'super_admin'));
   [
     ['US_OWNER', 'Dealer Principal', 'owner', 'owner'],
     ['US_SM', 'Rohit Sharma', 'salesmgr', 'sales_manager'],
@@ -521,7 +517,7 @@ export function seed(): void {
     ['US_SR2', 'Karan Mehta', 'sales2', 'sales_rep'],
     ['US_VW', 'Front Desk', 'viewer', 'viewer'],
   ].forEach((u) =>
-    DB.users.push(mk(u[0], u[1], u[2], u[3] as any, DEMO_PW))
+    DB.users.push(mk(u[0], u[1], u[2], u[3] as any))
   );
 
   [

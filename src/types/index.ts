@@ -104,11 +104,10 @@ export interface User {
   id: string;            // Primary Key (e.g. 'USR-101')
   code?: string;         // Employee ID Code
   name: string;          // Full display name
-  username: string;      // Login credential username
+  username: string;      // Login credential username (also used as email)
   role: Role;            // Assigned operational role
   phone?: string;        // Contact phone number
-  salt: string;          // Cryptographic password salt (SHA-256)
-  hash: string;          // Hashed password string
+  // Removed salt and hash as authentication is now handled by better-auth
   active: boolean;       // Active status boolean (inactive users cannot log in)
   deleted?: boolean;     // Soft-delete flag
   createdAt: number;     // Account creation timestamp (Epoch MS)

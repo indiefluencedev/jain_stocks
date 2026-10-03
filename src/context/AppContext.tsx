@@ -29,7 +29,8 @@ import {
   isIssuable,
   seed,
 } from '@/lib/store';
-import { API, currentUser, signIn, signOut as authSignOut, hasPerm } from '@/lib/ops';
+import { API, hasPerm } from '@/lib/ops';
+import { useSession, signIn, signOut, use } from 'better-auth/react';
 
 interface ToastItem {
   id: string;
@@ -95,8 +96,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const refresh = () => {
     const loadedDb = loadStore();
     setDbState({ ...loadedDb });
-    const curr = currentUser(loadedDb);
-    setUser(curr ? { ...curr } : null);
+    const session = useSession();
+    if (session.data) {
+      // Update user from better-auth session
+      setUser(session.data.user as User | null);
+    } else {
+      const curr = currentUser(loadedDb);
+      setUser(curr ? { ...curr } : null);
+    }
   };
 
   useEffect(() => {
@@ -104,8 +111,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     fetchServerStore().then((serverDb) => {
       if (serverDb) {
         setDbState({ ...serverDb });
-        const curr = currentUser(serverDb);
-        setUser(curr ? { ...curr } : null);
+        const session = useSession();
+        if (session.data) {
+          setUser(session.data.user as User | null);
+        } else {
+          const curr = currentUser(serverDb);
+          setUser(curr ? { ...curr } : null);
+        }
       }
     });
 
@@ -117,14 +129,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     handleHash();
     window.addEventListener('hashchange', handleHash);
 
-    const handleStorage = (e: StorageEvent) => {
-      refresh();
-    };
-    window.addEventListener('storage', handleStorage);
+    // Removed storage listener as it's handled by better-auth
+    // const handleStorage = (e: StorageEvent) => {
+    //   refresh();
+    // };
+    // window.addEventListener('storage', handleStorage);
 
     return () => {
       window.removeEventListener('hashchange', handleHash);
-      window.removeEventListener('storage', handleStorage);
+      // window.removeEventListener('storage', handleStorage);
     };
   }, []);
 
@@ -135,13 +148,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const login = (username: string, pw: string) => {
-    const u = signIn(username, pw);
+  const login = async (username: string, pw: string) => {
+    await signIn({ email: username, password: pw });
     refresh();
   };
 
   const logout = () => {
-    authSignOut(false);
+    signOut();
     setUser(null);
     setModal(null);
     if (typeof window !== 'undefined') {
@@ -151,8 +164,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const can = (perm: Permission): boolean => {
-    if (!user) return false;
-    return hasPerm(user, perm);
+    const session = useSession();
+    if (!session.data?.user) return false;
+    return hasPerm(session.data.user as User, perm);
   };
 
   const apiCall = (action: any, ...args: any[]) => {

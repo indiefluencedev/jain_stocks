@@ -7,3 +7,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+# Mandatory Task & Improvement Logging Rule
+
+All agents MUST follow the task logging system in `.agent/tasks/`:
+- **`.agent/tasks/tasks.md`**: Single Source of Truth (SSOT) for all accomplished (`[x]`) and pending (`[ ]`) tasks. Each task entry MUST state the reason, status, files involved, and exact file changes.
+- **`.agent/tasks/improvment_task.md`**: Log of improvement suggestions, audits, and future scope. Pending items here MUST be cross-logged in `tasks.md`.
