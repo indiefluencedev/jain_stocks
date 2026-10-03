@@ -35,7 +35,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onGoStockIn }) => 
   const [cat, setCat] = useState('');
   const [model, setModel] = useState('');
   const [st, setSt] = useState('');
-
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(25);
+  const [serverPagination, setServerPagination] = useState<{
+    totalRecords: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -46,6 +53,24 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onGoStockIn }) => 
       }
     }
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    if (q.trim()) params.set('search', q.trim());
+    if (cat) params.set('category', cat);
+
+    fetch(`/api/inventory?${params.toString()}`)
+      .then((res) => res.json())
+      .then((res) => {
+        if (res.pagination) {
+          setServerPagination(res.pagination);
+        }
+      })
+      .catch((err) => console.warn('Inventory API fetch fallback:', err));
+  }, [page, pageSize, q, cat]);
 
   const parts = activeParts(db);
   const bal = balances(db);
@@ -570,6 +595,19 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onGoStockIn }) => 
         data={filteredParts}
         emptyText="No parts match your search."
         onRowClick={openPartDetail}
+        pagination={
+          serverPagination
+            ? {
+                page,
+                pageSize,
+                totalRecords: serverPagination.totalRecords,
+                totalPages: serverPagination.totalPages,
+                hasNextPage: serverPagination.hasNextPage,
+                hasPrevPage: serverPagination.hasPrevPage,
+                onPageChange: (p) => setPage(p),
+              }
+            : undefined
+        }
       />
     </div>
   );

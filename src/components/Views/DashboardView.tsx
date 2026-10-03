@@ -15,6 +15,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
+import { useRouter } from 'next/navigation';
 import {
   activeParts,
   balances,
@@ -46,6 +47,7 @@ interface DashboardViewProps {
 /** Dashboard Overview View Component */
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNewRequest }) => {
   const { db, user, setRoute, can } = useApp();
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
 
   if (!user) return null;
@@ -134,6 +136,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNewRequest }) =>
       window.sessionStorage.setItem('inv_search', searchQuery);
     }
     setRoute('inventory');
+    router.push('/inventory');
   };
 
   const getFeedIcon = (type: string) => {
@@ -183,7 +186,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNewRequest }) =>
           )}
 
           {can('stock_in') && (
-            <button className="btn" onClick={() => setRoute('stockin')}>
+            <button
+              className="btn"
+              onClick={() => {
+                setRoute('stockin');
+                router.push('/stockin');
+              }}
+            >
               <ArrowDownCircle size={18} /> Stock in
             </button>
           )}
@@ -219,7 +228,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNewRequest }) =>
               <h2>Needs attention</h2>
               <button
                 className="btn ghost sm"
-                onClick={() => setRoute('inventory')}
+                onClick={() => {
+                  setRoute('inventory');
+                  router.push('/inventory');
+                }}
               >
                 See all
               </button>
@@ -292,7 +304,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNewRequest }) =>
             {can('reports') && (
               <button
                 className="btn ghost sm"
-                onClick={() => setRoute('ledger')}
+                onClick={() => {
+                  setRoute('ledger');
+                  router.push('/ledger');
+                }}
               >
                 Full ledger
               </button>

@@ -139,9 +139,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const setRoute = (r: string) => {
     setActiveRouteState(r);
-    if (typeof window !== 'undefined') {
-      window.location.hash = '#/' + r;
-    }
   };
 
   const login = async (username: string, pw: string) => {

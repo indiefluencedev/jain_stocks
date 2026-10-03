@@ -12,6 +12,7 @@
 
 import React from 'react';
 import { useApp } from '@/context/AppContext';
+import { useRouter, usePathname } from 'next/navigation';
 import { ROLES } from '@/lib/constants';
 import { initials } from '@/lib/store';
 import {
@@ -50,6 +51,8 @@ interface NavItem {
  */
 export const Sidebar: React.FC = () => {
   const { db, user, activeRoute, setRoute, logout, openCount, can } = useApp();
+  const router = useRouter();
+  const pathname = usePathname();
 
   if (!user) return null;
 
@@ -78,7 +81,6 @@ export const Sidebar: React.FC = () => {
 
   const allowedItems = NAV_ITEMS.filter(isAllowed);
 
-
   let currentGroup = '';
   const renderedItems: React.ReactNode[] = [];
 
@@ -93,13 +95,16 @@ export const Sidebar: React.FC = () => {
     }
 
     const oc = item.key === 'requests' ? openCount() : 0;
-    const isActive = activeRoute === item.key;
+    const isActive = pathname.startsWith('/' + item.key) || (pathname === '/' && item.key === 'dashboard');
 
     renderedItems.push(
       <button
         key={item.key}
         className={isActive ? 'on' : ''}
-        onClick={() => setRoute(item.key)}
+        onClick={() => {
+          setRoute(item.key);
+          router.push('/' + item.key);
+        }}
         title={item.label}
       >
         {item.icon}

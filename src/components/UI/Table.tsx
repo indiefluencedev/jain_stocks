@@ -25,6 +25,16 @@ export interface Column<T> {
   format?: (val: any, row: T) => ReactNode; // Formatter callback for raw value
 }
 
+export interface TablePaginationInfo {
+  page: number;
+  pageSize: number;
+  totalRecords: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+  onPageChange: (newPage: number) => void;
+}
+
 /**
  * Table Component Props Interface.
  */
@@ -35,6 +45,7 @@ interface TableProps<T> {
   cards?: boolean;                      // Enable responsive card styling on mobile
   onRowClick?: (row: T) => void;        // Row click event listener
   getRowKey?: (row: T, idx: number) => string | number; // Unique row key generator
+  pagination?: TablePaginationInfo;     // Optional pagination state & handler controls
 }
 
 /**
@@ -47,6 +58,7 @@ export function Table<T extends Record<string, any>>({
   cards = true,
   onRowClick,
   getRowKey,
+  pagination,
 }: TableProps<T>) {
   if (!data || data.length === 0) {
     return <div className="empty">{emptyText}</div>;
@@ -103,6 +115,43 @@ export function Table<T extends Record<string, any>>({
           })}
         </tbody>
       </table>
+      {pagination && pagination.totalPages > 1 && (
+        <div
+          className="pagination-bar"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: '14px',
+            paddingTop: '12px',
+            borderTop: '1px solid var(--border-dim, rgba(255, 255, 255, 0.08))',
+            flexWrap: 'wrap',
+            gap: '8px',
+          }}
+        >
+          <div className="sub" style={{ fontSize: '13px' }}>
+            Showing page <b>{pagination.page}</b> of <b>{pagination.totalPages}</b> ({pagination.totalRecords} total records)
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              className="btn sm"
+              disabled={!pagination.hasPrevPage}
+              onClick={() => pagination.onPageChange(pagination.page - 1)}
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              className="btn sm"
+              disabled={!pagination.hasNextPage}
+              onClick={() => pagination.onPageChange(pagination.page + 1)}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -13,7 +13,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { fmtDT, startOfDay, reversedSet } from '@/lib/store';
 import { MV } from '@/lib/constants';
@@ -33,6 +33,32 @@ export const LedgerView: React.FC = () => {
   const [type, setType] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(25);
+  const [serverPagination, setServerPagination] = useState<{
+    totalRecords: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    if (q.trim()) params.set('search', q.trim());
+    if (type) params.set('type', type);
+
+    fetch(`/api/ledger?${params.toString()}`)
+      .then((res) => res.json())
+      .then((res) => {
+        if (res.pagination) {
+          setServerPagination(res.pagination);
+        }
+      })
+      .catch((err) => console.warn('Ledger API fetch fallback:', err));
+  }, [page, pageSize, q, type]);
 
   const fromTs = fromDate ? startOfDay(new Date(fromDate).getTime()) : 0;
   const toTs = toDate ? startOfDay(new Date(toDate).getTime()) + DAY : Infinity;
@@ -279,6 +305,19 @@ export const LedgerView: React.FC = () => {
         columns={columns}
         data={displayRows}
         emptyText="No ledger entries match."
+        pagination={
+          serverPagination
+            ? {
+                page,
+                pageSize,
+                totalRecords: serverPagination.totalRecords,
+                totalPages: serverPagination.totalPages,
+                hasNextPage: serverPagination.hasNextPage,
+                hasPrevPage: serverPagination.hasPrevPage,
+                onPageChange: (p) => setPage(p),
+              }
+            : undefined
+        }
       />
     </div>
   );
