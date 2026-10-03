@@ -90,6 +90,13 @@ This file is the **Single Source of Truth (SSOT)** for all accomplished (`[x]`) 
   - `scripts/backup-and-reset-db.js`: Created script to generate full JSON backup to `.agent/backup/database_backup_latest.json`, clear transactional tables (`stock_ledger`, `requests`, `request_items`, `challans`, `inwards`, `audit_logs`, `session`), delete non-superadmin accounts, and sync clean `app_state`.
   - `.agent/backup/database_backup_latest.json`: Local reference backup file storing the pre-reset data snapshot.
 
+### Task 9: App State Table Purge & Live DB Metrics Enforcement
+- **Reason / Situation**: User requested purging legacy sample audit logs, demo users, sample requests, challans, and inwards from the Neon DB `app_state` table (`full_store` JSON snapshot) so the dashboard strictly displays live database metrics. Also requested explanation of the `app_state` table.
+- **Status**: `[x]` Accomplished
+- **Files Involved & Changes Made**:
+  - `src/lib/store.ts`: Updated `seed()` to remove sample transaction log generation (ledger rows, requests, challans, inwards, sample audit logs) and demo user creation. Updated `STORE_KEY` to `ja_stock_mvp_v2` to invalidate legacy browser localStorage caches.
+  - `scripts/purge-and-reset-appstate.ts`: Created and executed script to clear relational transaction tables and overwrite `app_state` table (`WHERE key = 'full_store'`) in Neon DB with a clean snapshot containing 20 catalog parts, 8 destinations, 1 Super Admin user, and empty transaction arrays (`ledger: []`, `requests: []`, `challans: []`, `inwards: []`, `audit: []`).
+
 ---
 
 ## ⏳ Pending Tasks (`[ ]`)
@@ -125,41 +132,4 @@ This file is the **Single Source of Truth (SSOT)** for all accomplished (`[x]`) 
 - **Derived From**: General quality assurance.
 
 
-### Broken / Missing Functions (auto‑detected)
-- **Missing API endpoint** `GET /api/bikeModels` (listBikeModels) – UI cannot fetch bike models from DB.
-- **Missing API endpoint** `GET /api/adjustReasons` (listAdjustReasons) – UI cannot fetch adjustment reasons.
-- **Static data migration** – hard‑coded bike models / adjust reasons still live in `src/lib/constants.ts`.
-- **Dead auth files** `src/lib/auth‑client.ts`, `src/lib/auth‑rbac.ts`, `middleware.ts`, `neon.ts` – still present in repo and may be imported.
-- **Legacy crypto helpers** `hashPw`, `sha256` in `src/lib/store.ts` – should be replaced by native Web Crypto.
-- **Unused seed scripts** `scripts/seed-users.ts`, `scripts/seed-full-db.ts` – dead code.
-- **Missing RBAC tests** – no automated verification that each role respects its permission set.
 
-### Existing Pending Tasks (from previous log)
-- **Pending Task 1:** Execute Static Data Migration on Neon DB
-- **Pending Task 2:** Add API Endpoints `listBikeModels` & `listAdjustReasons`
-- **Pending Task 3:** Clean Up Unused Cryptographic Primitives from `store.ts`
-- **Pending Task 4:** Remove Unused Dead Files Identified in Ponytail Audit
-
-### Pending Task 1: Execute Static Data Migration on Neon DB
-- **Reason / Situation**: Shift hard-coded bike models, adjust reasons, and destination types from code to Neon DB database tables.
-- **Status**: `[ ]` Pending
-- **Files Involved**: `scripts/seed-static-data.ts`, `src/lib/ops.ts`, UI components.
-- **Derived From**: `improvment_task.md` (Next Step 1)
-
-### Pending Task 2: Add API Endpoints `listBikeModels` & `listAdjustReasons`
-- **Reason / Situation**: Fetch dynamic bike models and adjustment reasons from database at runtime instead of hardcoded arrays.
-- **Status**: `[ ]` Pending
-- **Files Involved**: `src/lib/ops.ts`, `src/components/Views/InventoryView.tsx`, `src/components/Views/ReturnsView.tsx`.
-- **Derived From**: `improvment_task.md` (Next Step 2)
-
-### Pending Task 3: Clean Up Unused Cryptographic Primitives from `store.ts`
-- **Reason / Situation**: Replace hand-rolled `sha256()` and `generateUUID()` in `store.ts` with standard `crypto.randomUUID()` and native Web Crypto APIs.
-- **Status**: `[ ]` Pending
-- **Files Involved**: `src/lib/store.ts`.
-- **Derived From**: `improvment_task.md` (Next Step 3)
-
-### Pending Task 4: Remove Unused Dead Files Identified in Ponytail Audit
-- **Reason / Situation**: Delete dead files (`jain-stock-mvp_1.html`, `scripts/seed-users.ts`, `scripts/seed-full-db.ts`, `src/lib/auth-rbac.ts`, `src/lib/auth-client.ts`, `middleware.ts`, `neon.ts`).
-- **Status**: `[ ]` Pending
-- **Files Involved**: Dead files listed in `docs/audit_ponytail.md`.
-- **Derived From**: `improvment_task.md` (Audit findings)

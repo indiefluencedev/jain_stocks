@@ -15,7 +15,7 @@
 import { Database, User, Part, Destination, LedgerRow, StockRequest, Challan, Inward, AuditLog, StockStatus } from '@/types';
 import { ROLES, SUPER_PW, DEMO_PW, STATUS_L } from './constants';
 
-export const STORE_KEY = 'ja_stock_mvp_v1';
+export const STORE_KEY = 'ja_stock_mvp_v2';
 export const SESSION_KEY = 'ja_stock_session';
 
 const DAY = 86400000;
@@ -506,19 +506,6 @@ export function seed(): void {
   };
 
   DB.users.push(mk('US_SUPER', 'Super Admin', 'superadmin', 'super_admin'));
-  [
-    ['US_OWNER', 'Dealer Principal', 'owner', 'owner'],
-    ['US_SM', 'Rohit Sharma', 'salesmgr', 'sales_manager'],
-    ['US_SVM', 'Anil Kumar', 'servicemgr', 'service_manager'],
-    ['US_WH', 'Sunil Verma', 'warehouse', 'warehouse_manager'],
-    ['US_IN', 'Deepak Saini', 'stockin', 'stock_in'],
-    ['US_ST', 'Manoj Yadav', 'store', 'storekeeper'],
-    ['US_SR1', 'Aman Gupta', 'sales', 'sales_rep'],
-    ['US_SR2', 'Karan Mehta', 'sales2', 'sales_rep'],
-    ['US_VW', 'Front Desk', 'viewer', 'viewer'],
-  ].forEach((u) =>
-    DB.users.push(mk(u[0], u[1], u[2], u[3] as any))
-  );
 
   [
     ['DS_CUST', 'Customer vehicle', 'customer_vehicle'],
@@ -575,10 +562,6 @@ export function seed(): void {
     ['GMA-LG-B35', 'Leg guard, chrome', 'Protection', 'Bullet 350', 2200, 2950, 28, 2, 8, 'D-07', 6],
   ];
 
-  const U = (id: string) => userById(id, DB)!;
-  const T0 = Date.now();
-  CLOCK = T0 - 50 * DAY;
-
   P.forEach((r, i) => {
     const p: Part = {
       id: toUUID('PT_' + String(i + 1).padStart(2, '0')),
@@ -597,179 +580,9 @@ export function seed(): void {
       barcode: '',
       description: '',
       active: true,
-      createdAt: CLOCK!,
+      createdAt: Date.now(),
     };
     DB.parts.push(p);
-    postLedgerRow(U('US_IN'), p.id, r[10], 'OPENING', {
-      remarks: 'Opening stock from physical count (sample)',
-    });
-  });
-
-  auditLog(
-    U('US_SUPER'),
-    'Opening stock loaded',
-    '20 parts from physical count (sample data)',
-    'seed'
-  );
-
-  const pid = (n: number) => toUUID('PT_' + String(n).padStart(2, '0'));
-  const ev: [daysOffset: number, action: () => void][] = [];
-
-  ev.push([
-    -30,
-    () =>
-      rawStockIn(U('US_IN'), {
-        invoiceNo: 'RE/GMA/26/48213',
-        supplier: 'Royal Enfield (GMA)',
-        lines: [
-          { partId: pid(2), qty: 2 },
-          { partId: pid(5), qty: 2 },
-          { partId: pid(15), qty: 10 },
-          { partId: pid(11), qty: 2 },
-        ],
-        remarks: 'Monthly GMA billing',
-      }),
-  ]);
-
-  ev.push([
-    -10,
-    () =>
-      rawStockIn(U('US_IN'), {
-        invoiceNo: 'RE/GMA/26/51077',
-        supplier: 'Royal Enfield (GMA)',
-        lines: [
-          { partId: pid(7), qty: 3 },
-          { partId: pid(14), qty: 2 },
-        ],
-        remarks: '',
-      }),
-  ]);
-
-  const I: [
-    day: number,
-    partNum: number,
-    qty: number,
-    destId: string,
-    chassis: string,
-    model: string,
-    inv: string,
-    requesterId: string
-  ][] = [
-    [-46, 3, 2, 'DS_CUST', '8F21', 'Classic 350', '', 'US_SR1'],
-    [-44, 6, 1, 'DS_CUST', '8F21', 'Classic 350', '', 'US_SR1'],
-    [-43, 17, 2, 'DS_SWALL', '', '', '', 'US_SM'],
-    [-40, 8, 1, 'DS_CUST', '3K77', 'Hunter 350', '', 'US_SR2'],
-    [-38, 1, 1, 'DS_COUNTER', '', '', 'JA/SI/0412', 'US_SR1'],
-    [-35, 2, 1, 'DS_CUST', '9A04', 'Meteor 350', '', 'US_SR2'],
-    [-33, 10, 1, 'DS_CUST', '9A04', 'Meteor 350', '', 'US_SR2'],
-    [-32, 7, 1, 'DS_CUST', '9A04', 'Meteor 350', '', 'US_SR2'],
-    [-29, 11, 1, 'DS_DB2', '', '', '', 'US_SM'],
-    [-28, 9, 1, 'DS_DB2', '', '', '', 'US_SM'],
-    [-26, 13, 2, 'DS_CUST', '5T19', 'Himalayan 450', '', 'US_SR1'],
-    [-25, 15, 3, 'DS_COUNTER', '', '', 'JA/SI/0467', 'US_SR1'],
-    [-22, 5, 1, 'DS_DB1', '', '', '', 'US_SM'],
-    [-21, 6, 1, 'DS_DB1', '', '', '', 'US_SM'],
-    [-20, 3, 3, 'DS_CUST', '2C88', 'Classic 350', '', 'US_SR2'],
-    [-18, 12, 1, 'DS_CUST', '2C88', 'Classic 350', '', 'US_SR2'],
-    [-16, 8, 1, 'DS_CUST', '6H40', 'Hunter 350', '', 'US_SR1'],
-    [-15, 13, 2, 'DS_COUNTER', '', '', 'JA/SI/0501', 'US_SR2'],
-    [-13, 15, 4, 'DS_WS', '', '', '', 'US_SVM'],
-    [-12, 2, 1, 'DS_CUST', '7M12', 'Meteor 350', '', 'US_SR1'],
-    [-9, 2, 2, 'DS_COUNTER', '', '', 'JA/SI/0533', 'US_SR2'],
-    [-8, 14, 1, 'DS_CUST', '4B63', 'Classic 350', '', 'US_SR1'],
-    [-6, 1, 2, 'DS_CUST', '4B63', 'Classic 350', '', 'US_SR1'],
-    [-5, 3, 4, 'DS_CUST', '1R09', 'Himalayan 450', '', 'US_SR2'],
-    [-4, 18, 1, 'DS_GD2', '', '', '', 'US_WH'],
-    [-3, 10, 2, 'DS_COUNTER', '', '', 'JA/SI/0548', 'US_SR1'],
-    [-2, 7, 2, 'DS_CUST', '3P55', 'Meteor 350', '', 'US_SR2'],
-    [-1, 15, 2, 'DS_CUST', '3P55', 'Meteor 350', '', 'US_SR2'],
-    [-1, 5, 1, 'DS_CUST', '6D21', 'Classic 350', '', 'US_SR1'],
-  ];
-
-  I.forEach((x) =>
-    ev.push([
-      x[0],
-      () => {
-        const r = rawCreateRequest(U(x[7]), {
-          destinationId: x[3],
-          chassis: x[4],
-          model: x[5],
-          salesInvoice: x[6],
-          items: [{ partId: pid(x[1]), qty: x[2] }],
-          requestedById: x[7],
-        });
-        CLOCK = (CLOCK || T0) + 18 * 60000;
-        rawIssue(
-          U('US_ST'),
-          r.id,
-          [{ partId: pid(x[1]), qty: x[2] }],
-          ''
-        );
-      },
-    ])
-  );
-
-  ev.push([
-    -14,
-    () =>
-      rawReturnStock(U('US_WH'), {
-        mode: 'destination',
-        destinationId: 'DS_SWALL',
-        lines: [{ partId: pid(17), qty: 1 }],
-        condition: 'good',
-        remarks: 'Display wall refreshed',
-      }),
-  ]);
-
-  ev.push([
-    -7,
-    () =>
-      rawAdjust(U('US_WH'), {
-        partId: pid(17),
-        qty: -1,
-        reason: 'Damaged in store',
-        remarks: 'Torn during handling',
-      }),
-  ]);
-
-  ev.sort((a, b) => a[0] - b[0]);
-  ev.forEach((e, i) => {
-    CLOCK = T0 + e[0] * DAY - (6 - (i % 5)) * 3600e3;
-    e[1]();
-  });
-
-  CLOCK = T0 - 2 * 3600e3;
-  const pr = rawCreateRequest(U('US_SR2'), {
-    destinationId: 'DS_CUST',
-    chassis: 'K7Q2',
-    model: 'Classic 350',
-    items: [
-      { partId: pid(3), qty: 2 },
-      { partId: pid(13), qty: 1 },
-    ],
-    remarks: 'Customer collecting Saturday',
-    requestedById: 'US_SR2',
-  });
-  CLOCK += 15 * 60000;
-  rawIssue(
-    U('US_ST'),
-    pr.id,
-    [{ partId: pid(3), qty: 2 }],
-    'Tank bag out of stock, balance pending'
-  );
-
-  CLOCK = T0 - 40 * 60000;
-  rawCreateRequest(U('US_SR1'), {
-    destinationId: 'DS_CUST',
-    chassis: '9Z31',
-    model: 'Himalayan 450',
-    customer: 'Walk-in, test ride booked',
-    items: [
-      { partId: pid(11), qty: 1 },
-      { partId: pid(9), qty: 1 },
-    ],
-    remarks: 'Fit before delivery',
-    requestedById: 'US_SR1',
   });
 
   CLOCK = null;

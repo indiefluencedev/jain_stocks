@@ -29,6 +29,14 @@ This file tracks **Improvement Suggestions**, **Audit Findings**, and **Future S
   - Documented Dynamic Live Stock Equation ($\text{Stock}(P, T)$) and Destination Holding Equation ($\text{Holding}(D, P)$).
   - Authored full 9-role tour document at `docs/06_ROLE_BASED_UI_AND_AUTHORITY_TOUR.md`.
 
+### 3. Database State Snapshot Purge & Live DB Metrics Enforcement
+- **Situation**: `app_state` table's `full_store` JSON snapshot contained legacy demo logs, demo users, and sample stock movements.
+- **Status**: `[x]` Resolved
+- **Improvements Implemented**:
+  - Purged legacy demo transactions, sample requests, challans, inwards, and audit logs from Neon PostgreSQL `app_state` table (`full_store`) and relational tables.
+  - Updated `seed()` in `src/lib/store.ts` to prevent sample data creation on initial load.
+  - Incremented client storage key `STORE_KEY` to `ja_stock_mvp_v2` for automatic cache invalidation in user browsers.
+
 ---
 
 ## 🔮 Future Scope & Suggested Tasks
