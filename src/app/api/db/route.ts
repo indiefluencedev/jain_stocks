@@ -114,7 +114,8 @@ export async function POST(req: Request) {
             role = EXCLUDED.role,
             status = EXCLUDED.status,
             salt = EXCLUDED.salt,
-            hash = EXCLUDED.hash;
+            hash = EXCLUDED.hash,
+            "lastLogin" = EXCLUDED."lastLogin";
         `.catch((err) => console.error('User sync sub-error:', err));
       }
     }

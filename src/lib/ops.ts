@@ -604,7 +604,7 @@ export function signIn(username: string, pw: string): User {
     throw new Error('This account has been deactivated. Contact the administrator.');
   }
   U.lastLogin = Date.now();
-  auditLog(U, 'Signed in', '', 'auth');
+  mutate(() => auditLog(U, 'Signed in', '', 'auth'));
 
   if (typeof window !== 'undefined') {
     sessionStorage.setItem(
