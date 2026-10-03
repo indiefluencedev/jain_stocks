@@ -83,6 +83,13 @@ This file is the **Single Source of Truth (SSOT)** for all accomplished (`[x]`) 
   - `src/context/AppContext.tsx`: Integrated `authClient.signIn`, `authClient.getSession()`, and `authClient.signOut()`. Added explicit browser console logs (`[BETTER_AUTH]`) tracking login requests, session token receipt/verification, and logout events.
   - `src/components/Views/LoginView.tsx`: Updated `handleSubmit` to async with loading state (`Authenticating...`) and browser console logging (`[LOGIN_VIEW]`).
 
+### Task 8: Database Reset & Production Hardening (Backup + Retention of Parts & Super Admin)
+- **Reason / Situation**: User requested wiping all demo transactional records (ledger entries, stock requests, delivery challans, inwards, audit logs, sessions) and removing all demo test users except `superadmin`, while preserving catalog data (parts, destinations, bike models) and saving a full local JSON backup for reference.
+- **Status**: `[x]` Accomplished
+- **Files Involved & Changes Made**:
+  - `scripts/backup-and-reset-db.js`: Created script to generate full JSON backup to `.agent/backup/database_backup_latest.json`, clear transactional tables (`stock_ledger`, `requests`, `request_items`, `challans`, `inwards`, `audit_logs`, `session`), delete non-superadmin accounts, and sync clean `app_state`.
+  - `.agent/backup/database_backup_latest.json`: Local reference backup file storing the pre-reset data snapshot.
+
 ---
 
 ## ⏳ Pending Tasks (`[ ]`)
